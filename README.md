@@ -9,7 +9,7 @@ TODO(본인 작성)
 TODO(본인 작성)
 
 ## 공개 주소
-TODO: GitHub Pages URL
+https://alfendi-55555.github.io/gaptrip/
 
 ## 사용법
 홈은 가운데 지도 + 오른쪽 ‘지금 떠나기’ 패널(휴대전화에서는 아래 시트)입니다.
