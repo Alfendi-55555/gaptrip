@@ -1,8 +1,1 @@
-{
-  "sample": true,
-  "updated_at": "2026-10-14T05:00:00+09:00",
-  "sources": [
-    { "name": "샘플 데이터 (가짜)", "url": "", "license": "목업용" }
-  ],
-  "counts": { "event": 8, "place": 6, "excludedNoCoords": 0 }
-}
+{"updated_at":"2026-10-15T15:07:20.617Z","basis_date":"2026-10-16","sources":[{"name":"서울시 문화행사 정보","service":"culturalEventInfo","url":"https://data.seoul.go.kr/","license":"TODO: 데이터셋 페이지 주소·이용 조건 확인"},{"name":"서울시 공공도서관 현황정보","service":"SeoulPublicLibraryInfo","url":"https://data.seoul.go.kr/","license":"TODO: 데이터셋 페이지 주소·이용 조건 확인"},{"name":"서울시 역사마스터 정보","service":"subwayStationMaster","url":"https://data.seoul.go.kr/","license":"TODO: 데이터셋 페이지 주소·이용 조건 확인"}],"counts":{"event":394,"place":216,"station":375,"excludedNoCoords":0,"excludedEnded":19217,"excludedLater":10}}
