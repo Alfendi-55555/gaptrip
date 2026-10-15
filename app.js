@@ -319,7 +319,7 @@ function onNext(step) {
     }
     go('time');
   } else if (step === 'time') {
-    if (!checkDeadline()) return;
+    if (!checkTime()) return;
     go(hasDeadline() ? 'dest' : 'confirm');
   } else if (step === 'dest') {
     clearErr('dest-pick-err');
@@ -340,9 +340,10 @@ function renderSummary() {
   const d = state.draft;
   $('sum-origin').textContent = d.origin?.label || '—';
   const dl = parseHM($('deadline').value);
-  const now = toMin(nowDate());
-  $('sum-time').textContent = !hasDeadline() ? '정해진 시각 없음 · 지금 열린 곳'
-    : dl === null ? '—' : `${fmtHM(dl)}까지 (지금부터 ${fmtSpan(dl - now)})`;
+  const dep = departMin();
+  const depText = dep === null ? '—' : departIsNow() ? `지금(${fmtHM(dep)}) 출발` : `${fmtHM(dep)} 출발`;
+  $('sum-time').textContent = !hasDeadline() ? `${depText} · 돌아올 시각 없음`
+    : dl === null || dep === null ? depText : `${depText} → ${fmtHM(dl)}까지 (${fmtSpan(dl - dep)})`;
   $('sum-dest-row').hidden = !hasDeadline();
   $('sum-dest').textContent = d.destMode === 'return' ? `출발지로 돌아오기 (${d.origin?.label || '—'})` : (d.dest?.label || '—');
 }
@@ -628,6 +629,47 @@ function fmtSpan(min) {
 }
 const LAST_MIN = 23 * 60 + 55; // 오늘 고를 수 있는 마지막 시각
 
+// 출발 시각: 기본은 지금, 바꾸면 그 시각 기준으로 모든 계산
+const departIsNow = () => document.querySelector('input[name="departMode"]:checked').value === 'now';
+const departMin = () => (departIsNow() ? toMin(nowDate()) : parseHM($('depart').value));
+const fromWord = () => (departIsNow() ? '지금부터' : '출발부터');
+
+function syncDepartUI() {
+  const now = departIsNow();
+  $('depart-box').hidden = now;
+  clearErr('depart-err', 'depart');
+  if (!now && !$('depart').value) {
+    // 처음 바꿀 때는 지금에서 10분 단위로 올린 시각을 채워 둠
+    $('depart').value = fmtHM(Math.min(LAST_MIN, Math.ceil((toMin(nowDate()) + 1) / 10) * 10));
+  }
+  syncRange();
+}
+
+function validateDepart() {
+  if (departIsNow()) return null;
+  const now = toMin(nowDate());
+  const v = parseHM($('depart').value);
+  if (v === null) return '출발 시각을 알려 주세요. 바로 출발하면 ‘지금’을 고르세요.';
+  if (v < now) {
+    if (now >= 18 * 60 && v < 6 * 60) return '오늘 안의 시각으로 골라 주세요. (자정 전까지만 찾을 수 있어요)';
+    return '지금보다 이른 시각에는 출발할 수 없어요. 지금 이후로 골라 주세요.';
+  }
+  if (hasDeadline() && v > LAST_MIN - MIN_WINDOW) return '그 시각에 출발하면 오늘 안에 다녀오기 어려워요. 더 이른 시각을 골라 주세요.';
+  return null;
+}
+
+// 출발 → 돌아오기 순서로 검사하고 첫 오류 칸으로 초점
+function checkTime() {
+  clearErr('depart-err', 'depart');
+  const dErr = validateDepart();
+  if (dErr) {
+    showErr('depart-err', dErr, 'depart');
+    $('depart').focus();
+    return false;
+  }
+  return checkDeadline();
+}
+
 function syncDeadlineUI() {
   const set = hasDeadline();
   $('deadline-box').hidden = !set;
@@ -640,7 +682,7 @@ function syncDeadlineUI() {
 
 // 시각 입력칸 ↔ 막대 ↔ '지금부터 ○ 뒤' 맞추기
 function syncRange() {
-  const now = toMin(nowDate());
+  const now = departMin() ?? toMin(nowDate());
   const range = $('deadline-range');
   const max = Math.floor((LAST_MIN - now) / 10) * 10;
   range.disabled = max < MIN_WINDOW;
@@ -648,7 +690,7 @@ function syncRange() {
   const v = parseHM($('deadline').value);
   if (v !== null && v > now) {
     range.value = String(Math.min(max, Math.max(MIN_WINDOW, v - now)));
-    $('deadline-left').textContent = `지금부터 ${fmtSpan(v - now)} 뒤`;
+    $('deadline-left').textContent = `${fromWord()} ${fmtSpan(v - now)} 뒤`;
   } else {
     range.value = String(MIN_WINDOW);
     $('deadline-left').textContent = range.disabled ? '오늘은 시간이 얼마 안 남았어요' : '';
@@ -657,7 +699,7 @@ function syncRange() {
 }
 
 function onRange() {
-  const now = toMin(nowDate());
+  const now = departMin() ?? toMin(nowDate());
   const target = Math.min(LAST_MIN, Math.ceil((now + +$('deadline-range').value) / 5) * 5);
   $('deadline').value = fmtHM(target);
   clearErr('deadline-err', 'deadline');
@@ -666,13 +708,14 @@ function onRange() {
 
 function validateDeadline() {
   if (!hasDeadline()) return null;
-  const now = toMin(nowDate());
+  const now = departMin();
+  if (now === null) return null; // 출발 시각 오류가 먼저 안내됨
   const v = parseHM($('deadline').value);
   if (v === null) return '몇 시까지 시간이 있는지 알려 주세요. 정해진 시각이 없으면 ‘딱히 없어요’를 고르세요.';
   if (v <= now) {
     // 밤늦게 이른 새벽 시각을 고르면 '내일'을 뜻한 것으로 봄
     if (now >= 18 * 60 && v < 6 * 60) return '오늘 안의 시각으로 골라 주세요. (자정 전까지만 찾을 수 있어요)';
-    return '지금보다 늦은 시각을 골라 주세요.';
+    return departIsNow() ? '지금보다 늦은 시각을 골라 주세요.' : '출발 시각보다 늦은 시각을 골라 주세요.';
   }
   if (v - now < MIN_WINDOW) return `시간이 너무 짧아요. ${MIN_WINDOW}분 이상 남았을 때 찾아볼 수 있어요.`;
   return null;
@@ -687,7 +730,7 @@ function checkDeadline() {
 }
 
 function onQuickAdd(e) {
-  const target = toMin(nowDate()) + +e.currentTarget.dataset.add;
+  const target = (departMin() ?? toMin(nowDate())) + +e.currentTarget.dataset.add;
   clearErr('deadline-err', 'deadline');
   if (target >= 24 * 60) {
     $('deadline').value = '';
@@ -708,14 +751,14 @@ async function runSearch() {
     return;
   }
   // 확인 화면에 머무는 사이 시각이 지났을 수 있으니 다시 검사
-  if (validateDeadline()) { go('time'); checkDeadline(); return; }
+  if (validateDepart() || validateDeadline()) { go('time'); checkTime(); return; }
   const d = state.draft;
   const withDeadline = hasDeadline();
   if (!d.origin) { go('origin'); onNext('origin'); return; }
   if (withDeadline && d.destMode === 'other' && !d.dest) { go('dest'); onNext('dest'); return; }
   state.plan = {
     origin: d.origin, dest: withDeadline ? destOf(d) : null, destMode: d.destMode, hasDeadline: withDeadline,
-    deadlineMin: withDeadline ? parseHM($('deadline').value) : null, nowMin: toMin(nowDate()),
+    deadlineMin: withDeadline ? parseHM($('deadline').value) : null, nowMin: departMin(), departNow: departIsNow(),
   };
   $('btn-search').disabled = true;
   setStatus('loading', '걷는 길을 계산하는 중이에요');
@@ -748,9 +791,10 @@ function renderResults({ keepStatus } = {}) {
 
   $('results-count').textContent = `${shown.length}곳`;
   const closedNow = state.computed.filter((p) => p.why === 'closed' || p.why === 'hours').length;
+  const dep = `${plan.origin.label}에서 ${plan.departNow ? '지금' : fmtHM(plan.nowMin)} 출발`;
   $('results-summary').textContent = (plan.hasDeadline
-    ? `${plan.origin.label} 출발 → ${fmtHM(plan.deadlineMin)}까지 ${plan.destMode === 'return' ? '출발지로 복귀' : plan.dest.label + ' 도착'}`
-    : `${plan.origin.label} 출발 · 돌아올 시각 없음 · 걸어서 ${NEARBY_MIN}분 안`)
+    ? `${dep} → ${fmtHM(plan.deadlineMin)}까지 ${plan.destMode === 'return' ? '출발지로 복귀' : plan.dest.label + ' 도착'}`
+    : `${dep} · 돌아올 시각 없음 · 걸어서 ${NEARBY_MIN}분 안`)
     + (closedNow ? ` · 그 시간에 운영하지 않는 ${closedNow}곳은 뺐어요` : '');
   renderDataDate();
 
@@ -762,11 +806,11 @@ function renderResults({ keepStatus } = {}) {
       const farAway = nearest > 15;
       if (farAway) say('empty', '출발지 근처에 찾아본 정보가 없어요. 지금은 서울 안의 정보만 있어요.', '서울 안의 역을 출발지로 골라 보세요.');
       else if (plan.hasDeadline) say('empty', `이 시간 안에 ${MIN_STAY}분 이상 머물 수 있는 곳이 없어요.`, '돌아올 시각을 늦추거나 도착지를 바꿔 보세요.');
-      else say('empty', `지금 열려 있고 걸어서 ${NEARBY_MIN}분 안에 갈 곳이 없어요.`, '돌아올 시각을 정하면 조금 먼 곳이나 나중에 여는 곳도 찾아볼 수 있어요.');
+      else say('empty', `${plan.departNow ? '지금' : '출발할 때'} 열려 있고 걸어서 ${NEARBY_MIN}분 안에 갈 곳이 없어요.`, '돌아올 시각을 정하면 조금 먼 곳이나 나중에 여는 곳도 찾아볼 수 있어요.');
     }
     list.append(el('li', { className: 'none', textContent: '조건에 맞는 곳이 없어요.' }));
   } else {
-    say('ok', plan.hasDeadline ? `${fmtHM(plan.deadlineMin)}까지 다녀올 수 있는 곳 ${shown.length}곳을 찾았어요.` : `지금 갈 수 있는 곳 ${shown.length}곳을 찾았어요.`);
+    say('ok', plan.hasDeadline ? `${fmtHM(plan.deadlineMin)}까지 다녀올 수 있는 곳 ${shown.length}곳을 찾았어요.` : `${plan.departNow ? '지금' : `${fmtHM(plan.nowMin)}에 출발하면`} 갈 수 있는 곳 ${shown.length}곳을 찾았어요.`);
     for (const p of shown) list.append(resultItem(p));
   }
   renderMapPlaces(shown, { fit: true });
@@ -1216,7 +1260,12 @@ async function init() {
   setStatus('loading', '근처 정보를 불러오는 중이에요');
   const storeOk = loadStore();
 
-  const tickNow = () => { $('now-label').textContent = fmtHM(toMin(nowDate())); if (state.view === 'time') syncRange(); };
+  const tickNow = () => {
+    const t = fmtHM(toMin(nowDate()));
+    $('now-label').textContent = t;
+    $('depart-now').textContent = t;
+    if (state.view === 'time') syncRange();
+  };
   tickNow();
   setInterval(tickNow, 30000);
 
@@ -1235,6 +1284,8 @@ async function init() {
   $('deadline').addEventListener('input', () => { clearErr('deadline-err', 'deadline'); syncRange(); });
   $('deadline-range').addEventListener('input', onRange);
   document.querySelectorAll('input[name="deadlineMode"]').forEach((r) => r.addEventListener('change', syncDeadlineUI));
+  document.querySelectorAll('input[name="departMode"]').forEach((r) => r.addEventListener('change', syncDepartUI));
+  $('depart').addEventListener('input', () => { clearErr('depart-err', 'depart'); syncRange(); });
   $('deadline').addEventListener('keydown', (e) => { if (e.key === 'Enter') onNext('time'); });
   document.querySelectorAll('.quick .chip').forEach((b) => b.addEventListener('click', onQuickAdd));
   document.querySelectorAll('input[name="destMode"]').forEach((r) => r.addEventListener('change', syncDestMode));

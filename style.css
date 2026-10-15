@@ -351,3 +351,7 @@ input[aria-invalid="true"] { border-color: var(--err); box-shadow: 0 0 0 1px var
 .result-row .stay { display: block; margin-top: 4px; font-weight: 700; color: var(--free); }
 .result-row .stay small { font-weight: 500; color: var(--muted); }
 .result-row .stay.unknown { color: var(--warn); }
+
+/* 출발·돌아오기 */
+.depart, .return { margin-top: 14px; }
+#depart-box { margin-top: 10px; }

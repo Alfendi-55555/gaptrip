@@ -40,9 +40,9 @@ TODO: 화면 보며 다듬기
 ## 데이터 출처와 갱신일
 | 데이터 | 용도 | 출처 URL | 이용 조건 | 갱신 |
 |---|---|---|---|---|
-| 서울시 문화행사 정보 (`culturalEventInfo`) | 기간 한정 행사 (오늘~30일 안에 시작하는 것만 저장) | TODO | TODO | Actions 하루 1회 |
-| 서울시 공공도서관 현황정보 (`SeoulPublicLibraryInfo`) | 상시 장소 | TODO | TODO | Actions 하루 1회 |
-| 서울시 역사마스터 정보 (`subwayStationMaster`) + `data/stations-manual.json`(API에 좌표가 없는 역 보충, 대략값) | 역 검색·출발지 좌표 | TODO | TODO | Actions 하루 1회 |
+| 서울시 문화행사 정보 (`culturalEventInfo`) | 기간 한정 행사 (오늘~30일 안에 시작하는 것만 저장) | https://data.seoul.go.kr/dataList/OA-15486/S/1/datasetView.do | 공공누리 제1유형(출처표시) — 출처를 밝히면 상업적 이용·변경 가능 | Actions 하루 1회 |
+| 서울시 공공도서관 현황정보 (`SeoulPublicLibraryInfo`) | 상시 장소 | https://data.seoul.go.kr/dataList/OA-15480/S/1/datasetView.do | 공공누리 제1유형(출처표시) — 출처를 밝히면 상업적 이용·변경 가능 | Actions 하루 1회 |
+| 서울시 역사마스터 정보 (`subwayStationMaster`) + `data/stations-manual.json`(API에 좌표가 없는 역 보충, 대략값) | 역 검색·출발지 좌표 | https://data.seoul.go.kr/dataList/OA-21232/S/1/datasetView.do | 공공누리 제1유형(출처표시) — 출처를 밝히면 상업적 이용·변경 가능 | Actions 하루 1회 |
 
 갱신일: `data/meta.json`의 `updated_at`
 
@@ -51,7 +51,7 @@ TODO: 화면 보며 다듬기
 ### 데이터
 | 데이터 | 쓰는 곳 | 출처 표시 / 라이선스 |
 |---|---|---|
-| 서울 열린데이터광장 — 문화행사 정보, 공공도서관 현황정보, 역사마스터 정보 | `data/places.json`, `data/stations.json` | 출처: 서울 열린데이터광장(data.seoul.go.kr). 이용 조건: TODO(본인 확인 — 데이터셋 페이지의 이용허락 조건) |
+| 서울 열린데이터광장 — 문화행사 정보, 공공도서관 현황정보, 역사마스터 정보 | `data/places.json`, `data/stations.json` | 출처: 서울 열린데이터광장(data.seoul.go.kr), 저작권자 서울특별시. 이용 조건: 세 데이터 모두 **공공누리 제1유형(출처표시)** — 출처만 밝히면 변경·상업적 이용 가능 |
 | OpenStreetMap 지도 타일 | 화면의 지도 | © OpenStreetMap 기여자. 타일은 OpenStreetMap 재단 서버(tile.openstreetmap.org)를 [타일 이용 정책](https://operations.osmfoundation.org/policies/tiles/)에 따라 사용 |
 | OpenStreetMap 길 데이터 | `data/walk/*.json`, 걷는 시간 계산 | © OpenStreetMap 기여자, [ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/) — 아래 참고 |
 

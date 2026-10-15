@@ -66,9 +66,21 @@
         <!-- 2 시간 -->
         <section data-view="time" aria-labelledby="v-time-h" hidden>
           <p class="stepper"></p>
-          <h2 id="v-time-h" tabindex="-1">언제까지 돌아와야 하나요?</h2>
-          <fieldset>
-            <legend class="visually-hidden">돌아올 시각</legend>
+          <h2 id="v-time-h" tabindex="-1">언제 출발해서, 언제까지 돌아오나요?</h2>
+          <fieldset class="depart">
+            <legend>출발</legend>
+            <div class="seg">
+              <label><input type="radio" name="departMode" value="now" checked> 지금 (<span id="depart-now">--:--</span>)</label>
+              <label><input type="radio" name="departMode" value="set"> 시각 정하기</label>
+            </div>
+            <div id="depart-box" class="row" hidden>
+              <label for="depart" class="visually-hidden">출발 시각</label>
+              <input id="depart" type="time" step="300" aria-describedby="depart-err">
+            </div>
+            <p id="depart-err" class="field-err" hidden></p>
+          </fieldset>
+          <fieldset class="return">
+            <legend>돌아오기</legend>
             <div class="seg">
               <label><input type="radio" name="deadlineMode" value="set" checked> 시각 정하기</label>
               <label><input type="radio" name="deadlineMode" value="none"> 딱히 없어요</label>
@@ -94,7 +106,7 @@
             <p id="deadline-hint" class="hint">지금은 <span id="now-label">--:--</span> · 시각을 직접 입력하거나 막대를 움직여도 돼요.</p>
             <p id="deadline-err" class="field-err" hidden></p>
           </div>
-          <p id="nodeadline-hint" class="hint nodeadline" hidden>지금 열려 있고 걸어서 30분 안에 갈 수 있는 곳을, 닫을 때까지 머물 수 있는 시간과 함께 보여 드려요. 도착지는 고르지 않아도 돼요.</p>
+          <p id="nodeadline-hint" class="hint nodeadline" hidden>출발할 때 열려 있거나 곧 여는 곳 중 걸어서 30분 안에 갈 수 있는 곳을, 닫을 때까지 머물 수 있는 시간과 함께 보여 드려요. 도착지는 고르지 않아도 돼요.</p>
           <div class="step-nav">
             <button type="button" class="btn" data-prev>이전</button>
             <button type="button" class="btn btn-primary" data-next="time">다음</button>

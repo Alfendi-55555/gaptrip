@@ -257,9 +257,9 @@ function write(file, data) {
     updated_at: new Date().toISOString(),
     basis_date: today,
     sources: [
-      { name: '서울시 문화행사 정보', service: 'culturalEventInfo', url: 'https://data.seoul.go.kr/', license: 'TODO: 데이터셋 페이지 주소·이용 조건 확인' },
-      { name: '서울시 공공도서관 현황정보', service: 'SeoulPublicLibraryInfo', url: 'https://data.seoul.go.kr/', license: 'TODO: 데이터셋 페이지 주소·이용 조건 확인' },
-      { name: '서울시 역사마스터 정보', service: 'subwayStationMaster', url: 'https://data.seoul.go.kr/', license: 'TODO: 데이터셋 페이지 주소·이용 조건 확인' },
+      { name: '서울시 문화행사 정보', service: 'culturalEventInfo', url: 'https://data.seoul.go.kr/dataList/OA-15486/S/1/datasetView.do', license: '공공누리 제1유형(출처표시)' },
+      { name: '서울시 공공도서관 현황정보', service: 'SeoulPublicLibraryInfo', url: 'https://data.seoul.go.kr/dataList/OA-15480/S/1/datasetView.do', license: '공공누리 제1유형(출처표시)' },
+      { name: '서울시 역사마스터 정보', service: 'subwayStationMaster', url: 'https://data.seoul.go.kr/dataList/OA-21232/S/1/datasetView.do', license: '공공누리 제1유형(출처표시)' },
     ],
     counts: {
       event: events.items.length,
