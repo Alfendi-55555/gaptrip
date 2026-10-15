@@ -36,5 +36,6 @@ jobs:
             echo "변경 없음"
           else
             git commit -m "data: $(TZ=Asia/Seoul date +%Y-%m-%d) (KST)"
+            git pull --rebase
             git push
           fi

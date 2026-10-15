@@ -1,0 +1,17 @@
+{
+ "attribution": "© OpenStreetMap contributors (ODbL 1.0)",
+ "areas": [
+  {
+   "id": "hufs",
+   "name": "한국외대 주변",
+   "bbox": [
+    37.552,
+    127.002,
+    37.642,
+    127.116
+   ],
+   "file": "hufs.json",
+   "built": "2026-10-15T16:13:56.199Z"
+  }
+ ]
+}

@@ -34,6 +34,7 @@ TODO: 화면 보며 다듬기
 - 지도: **Leaflet + OpenStreetMap** (키 불필요). 카카오 지도 코드는 준비돼 있지만 `config.js`의 `useKakaoMap: false`로 꺼 둠 — 카카오맵 무료 쿼터는 계정당 처음 켠 앱 하나에만 주어져서 최후의 수단으로 남김. 켜면 `config.js`의 **JavaScript 키**(등록 도메인에서만 작동하는 공개용 키)를 쓰고, 못 불러오면 OSM으로 자동 대체합니다.
 - 길찾기 버튼은 카카오맵 웹 링크(`map.kakao.com/link/to/...`)라 API 쿼터와 무관합니다.
 - 카카오 콘솔 설정: [앱] → [플랫폼 키] → JavaScript 키 → JavaScript SDK 도메인에 `http://localhost:8775`, `https://alfendi-55555.github.io` 등록 완료. [카카오맵] → [사용 설정]은 **아직 OFF**(켤 때만 ON).
+- 걷는 시간: `data/walk/hufs.json`(한국외대 주변 약 5km의 OpenStreetMap 길 그래프)으로 **브라우저 안에서** 최단 거리를 계산합니다(`walk.js`). 현재 위치는 외부로 보내지 않습니다. 그래프 범위 밖은 직선거리 × 1.3 어림값으로 대신하고 화면에 ‘직선 어림’으로 표시합니다. 그래프는 Actions(`update-walk.yml`)가 매주 월요일 04:00 KST에 Overpass API로 한 번 받아 다시 만듭니다.
 - **REST API 키는 저장소에 넣지 않습니다.** GitHub Secrets `KAKAO_REST_KEY`에만 둡니다(Actions 지오코딩용).
 
 ## 데이터 출처와 갱신일
@@ -44,6 +45,26 @@ TODO: 화면 보며 다듬기
 | 서울시 역사마스터 정보 (`subwayStationMaster`) + `data/stations-manual.json`(API에 좌표가 없는 역 보충, 대략값) | 역 검색·출발지 좌표 | TODO | TODO | Actions 하루 1회 |
 
 갱신일: `data/meta.json`의 `updated_at`
+
+## 출처와 라이선스
+
+### 데이터
+| 데이터 | 쓰는 곳 | 출처 표시 / 라이선스 |
+|---|---|---|
+| 서울 열린데이터광장 — 문화행사 정보, 공공도서관 현황정보, 역사마스터 정보 | `data/places.json`, `data/stations.json` | 출처: 서울 열린데이터광장(data.seoul.go.kr). 이용 조건: TODO(본인 확인 — 데이터셋 페이지의 이용허락 조건) |
+| OpenStreetMap 지도 타일 | 화면의 지도 | © OpenStreetMap 기여자. 타일은 OpenStreetMap 재단 서버(tile.openstreetmap.org)를 [타일 이용 정책](https://operations.osmfoundation.org/policies/tiles/)에 따라 사용 |
+| OpenStreetMap 길 데이터 | `data/walk/*.json`, 걷는 시간 계산 | © OpenStreetMap 기여자, [ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/) — 아래 참고 |
+
+**OpenStreetMap(ODbL 1.0) 관련**
+- `data/walk/*.json`은 OpenStreetMap 데이터를 가공해 만든 **파생 데이터베이스**라서 **ODbL 1.0을 그대로 따릅니다.** 누구나 쓸 수 있지만, 출처(© OpenStreetMap 기여자)를 밝히고 같은 라이선스를 유지해야 합니다. 만드는 방법은 `scripts/build-walk-graph.js`에 공개되어 있습니다.
+- 화면에 보여 주는 걷는 시간과 지도는 ODbL의 **제작물(Produced Work)**이라 출처 표시가 필요합니다. 지도 오른쪽 아래(지도 오류 알리기 링크 포함)와 결과 목록 아래에 표시하고 있습니다.
+- 자세한 내용: https://www.openstreetmap.org/copyright
+
+### 사용한 소프트웨어
+- [Leaflet](https://leafletjs.com/) 1.9.4 — BSD 2-Clause (cdnjs에서 불러옴)
+
+### 이 저장소의 코드
+- TODO(본인 결정): 코드에 라이선스 파일(LICENSE)이 없으면 다른 사람은 원칙적으로 코드를 가져다 쓸 수 없습니다. 공개해도 괜찮다면 MIT 같은 라이선스를 고르세요. 어떤 라이선스를 고르든 `data/walk/*.json`은 ODbL을 따릅니다.
 
 ## 검증 기록
 | # | 입력 | 기대 결과 | 실제 결과 | 판단 | 근거 |

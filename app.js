@@ -43,7 +43,8 @@ const state = {
   here: null,       // 현재 위치 { lat, lng, demo } — 저장하지 않음
   hereState: 'pending', // pending | ok | fail
   flow: ['origin', 'time', 'dest', 'confirm'],
-  plan: null,       // { origin, dest, destMode, hasDeadline, deadlineMin, nowMin }
+  plan: null,       // { origin, dest, destMode, hasDeadline, deadlineMin, nowMin, routes }
+  hereRoutes: null, // 현재 출발지 기준 길 계산 결과(홈 안내용)
   flowHasOrigin: false,
   computed: null,   // 계산 결과(필터 전)
   view: 'start',
@@ -83,7 +84,9 @@ function haversineKm(a, b) {
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(h));
 }
+// 길 데이터가 없을 때 쓰는 직선거리 어림값
 const walkMin = (km) => Math.max(1, Math.round((km * DETOUR / WALK_KMH) * 60));
+const ROUTE_MAX_KM = 6; // 직선거리가 이보다 멀면 길 계산 없이 어림값
 const isOpenToday = (p) => p.kind !== 'event' || (p.startDate <= todayStr() && todayStr() <= p.endDate);
 
 // 원본에서 휴관일을 따로 받지 못한 예전 데이터는 특이사항의 '휴관: ...'에서 읽음
@@ -96,12 +99,20 @@ function compute(plan) {
   for (const p of state.places) {
     if (!isOpenToday(p)) continue;
     const km = haversineKm(plan.origin, p);
-    const go = walkMin(km);
-    const back = plan.hasDeadline ? walkMin(haversineKm(p, plan.dest)) : 0;
+    // 걷는 시간: 길 그래프로 계산, 범위 밖이면 직선거리 어림
+    const goRoute = plan.routes && km <= ROUTE_MAX_KM ? plan.routes.go(p) : null;
+    const go = goRoute ?? walkMin(km);
+    let back = 0, backRoute = null;
+    if (plan.hasDeadline) {
+      const kmBack = haversineKm(p, plan.dest);
+      backRoute = plan.routes && kmBack <= ROUTE_MAX_KM ? plan.routes.back(p) : null;
+      back = backRoute ?? walkMin(kmBack);
+    }
+    const routed = goRoute != null && (!plan.hasDeadline || backRoute != null);
     const arrive = plan.nowMin + go;
     const leaveBy = plan.hasDeadline ? plan.deadlineMin - back : null;
     const sched = GapHours.todaySchedule({ hours: p.hours, closed: closedText(p) }, date);
-    const r = { ...p, km, go, back, arrive, leaveBy, sched, reachable: false };
+    const r = { ...p, km, go, back, routed, arrive, leaveBy, sched, reachable: false };
 
     if (!plan.hasDeadline && go > NEARBY_MIN) { r.why = 'far'; out.push(r); continue; }
     if (plan.hasDeadline && leaveBy - arrive < MIN_STAY) { r.why = 'time'; out.push(r); continue; }
@@ -144,6 +155,30 @@ function compute(plan) {
     out.push(r);
   }
   return out;
+}
+
+// 출발지(와 도착지)에서 길 그래프 최단 거리 계산. 범위 밖이거나 실패하면 null → 직선거리 어림.
+// 현재 위치 좌표는 여기서 브라우저 안에서만 쓰임.
+async function prepareRoutes(origin, dest) {
+  if (!window.GapWalk) return null;
+  try {
+    const g = await GapWalk.graphFor(origin);
+    const fromO = g?.from(origin);
+    if (!fromO) return null;
+    let fromD = fromO;
+    if (dest && haversineKm(origin, dest) > 0.02) {
+      const gd = await GapWalk.graphFor(dest);
+      fromD = gd ? gd.from(dest) : null;
+    }
+    return {
+      area: g.name,
+      go: (p) => fromO.minutesTo(p),
+      back: (p) => (fromD ? fromD.minutesTo(p) : null),
+    };
+  } catch (e) {
+    console.warn('길 계산 실패, 직선거리로 대신해요', e);
+    return null;
+  }
 }
 
 // 머물 수 있는 시간 문구: { main, sub, unknown }
@@ -538,7 +573,9 @@ function renderHere() {
     line.append(o.type === 'geo' ? '📍 지금 여기서 출발해요' : `🚉 ${o.label}에서 출발해요`,
       el('small', { textContent: `${where}${st ? ` · ${st.name}역 걸어서 ${fmtDur(st.min)}` : ''}` }));
     btn.textContent = '출발지 바꾸기';
-    const near = compute({ origin: o, hasDeadline: false, nowMin: toMin(nowDate()) }).filter((p) => p.reachable);
+    const routes = state.hereRoutes?.key === originKey(o) ? state.hereRoutes.routes : null;
+    const near = compute({ origin: o, hasDeadline: false, nowMin: toMin(nowDate()), routes }).filter((p) => p.reachable);
+    if (!routes) refreshHereRoutes(o);
     const ev = near.filter((p) => p.kind === 'event').length;
     $('today-count').textContent = `걸어서 ${NEARBY_MIN}분 안에 지금 열려 있거나 곧 여는 곳이 ${near.length}곳(행사 ${ev} · 장소 ${near.length - ev}) 있어요. 언제까지 시간이 있는지 알려 주시면 그 안에 다녀올 곳만 골라 드려요.`;
   } else if (state.hereState === 'pending') {
@@ -548,6 +585,18 @@ function renderHere() {
     btn.textContent = '출발지 고르기';
     $('today-count').textContent = '';
   }
+}
+
+const originKey = (o) => `${o.lat.toFixed(5)},${o.lng.toFixed(5)}`;
+// 출발지가 바뀌면 길 계산을 한 번 해 두고 홈 안내를 다시 그림
+async function refreshHereRoutes(o) {
+  const key = originKey(o);
+  if (state.hereRoutes?.key === key || state.hereRoutes?.pending === key) return;
+  state.hereRoutes = { pending: key };
+  const routes = await prepareRoutes(o, null);
+  if (state.hereRoutes?.pending !== key) return;
+  state.hereRoutes = { key, routes };
+  if (routes && state.draft.origin && originKey(state.draft.origin) === key) renderHere();
 }
 
 function nearestStation(p) {
@@ -653,7 +702,7 @@ function onQuickAdd(e) {
 
 /* ---------- 찾기 ---------- */
 
-function runSearch() {
+async function runSearch() {
   if (!state.dataOk) {
     setStatus('error', '근처 정보를 불러오지 못해서 찾을 수 없어요.', '인터넷 연결을 확인하고 새로고침해 주세요.');
     return;
@@ -668,6 +717,10 @@ function runSearch() {
     origin: d.origin, dest: withDeadline ? destOf(d) : null, destMode: d.destMode, hasDeadline: withDeadline,
     deadlineMin: withDeadline ? parseHM($('deadline').value) : null, nowMin: toMin(nowDate()),
   };
+  $('btn-search').disabled = true;
+  setStatus('loading', '걷는 길을 계산하는 중이에요');
+  state.plan.routes = await prepareRoutes(state.plan.origin, state.plan.dest);
+  $('btn-search').disabled = false;
   state.computed = compute(state.plan);
   go('results', { focus: false });
   renderResults();
@@ -733,7 +786,7 @@ function resultItem(p) {
     el('span', { className: 'title', textContent: p.title }),
     el('span', { className: 'line' }, '🕘 ', el('b', { textContent: p.hours || '운영시간은 방문 전 확인하세요' })),
     note ? el('span', { className: 'line', textContent: `특이사항 · ${note}` }) : null,
-    el('span', { className: 'line', textContent: `가는 데 ${fmtDur(p.go)} · 도착 약 ${fmtHM(p.arrive)}` }),
+    el('span', { className: 'line', textContent: `걸어서 ${fmtDur(p.go)}${p.routed ? '' : ' (직선 어림)'} · 도착 약 ${fmtHM(p.arrive)}` }),
     stayLine(p),
     el('span', { className: 'more', textContent: '자세히 보기 →' }));
   btn.dataset.id = p.id;
@@ -751,7 +804,7 @@ function renderDataDate() {
   if (!m?.updated_at) { $('data-date').textContent = ''; return; }
   const upd = new Date(m.updated_at);
   const days = Math.floor((nowDate() - upd) / 86400000);
-  $('data-date').textContent = `정보 갱신 ${todayStr(upd)}${state.isSample ? ' · 샘플 데이터' : ''}${days >= STALE_DAYS ? ' · ⚠ 정보가 오래됐을 수 있어요' : ''}`;
+  $('data-date').textContent = `정보 갱신 ${todayStr(upd)}${state.isSample ? ' · 샘플 데이터' : ''}${days >= STALE_DAYS ? ' · ⚠ 정보가 오래됐을 수 있어요' : ''} · 행사·도서관: 서울 열린데이터광장 · 길: © OpenStreetMap 기여자`;
 }
 
 /* ---------- 상세 ---------- */
@@ -810,6 +863,9 @@ function openDetail(id) {
     const times = el('dl', { className: 'times' });
     for (const [k, v] of rows) times.append(el('div', {}, el('dt', { textContent: k }), el('dd', { textContent: v })));
     wrap.append(el('h3', { textContent: '이동과 머무는 시간 (대략값)' }), times);
+    wrap.append(el('p', { className: 'hint', textContent: c.routed
+      ? '걷는 시간은 OpenStreetMap 길 데이터로 계산했어요.'
+      : '이 장소는 길 데이터 범위 밖이라 직선거리로 어림했어요. 실제로는 더 걸릴 수 있어요.' }));
     if (c.reachable) {
       const tips = [
         c.wait > 0 && `${fmtHM(c.from)}에 열어요. 도착해서 약 ${c.wait}분 기다려야 해요.`,
@@ -991,7 +1047,7 @@ async function initMap() {
     map = L.map('map', { zoomControl: true }).setView(SEOUL, 12);
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> 기여자 · <a href="https://www.openstreetmap.org/fixthemap">지도 오류 알리기</a>',
     }).addTo(map);
     placeLayer = L.layerGroup().addTo(map);
     meLayer = L.layerGroup().addTo(map);
@@ -1209,7 +1265,7 @@ async function init() {
 
   $('sample-note').hidden = !state.isSample;
   const upd = state.meta.updated_at ? todayStr(new Date(state.meta.updated_at)) : '알 수 없음';
-  $('foot-meta').textContent = `정보 갱신일 ${upd}${state.isSample ? ' · 샘플 데이터(가짜)' : ''} · 이동 시간은 직선거리 기반 대략값 · 지도 © ${mapEngine === 'kakao' ? 'Kakao' : 'OpenStreetMap'}`;
+  $('foot-meta').textContent = `정보 갱신일 ${upd}${state.isSample ? ' · 샘플 데이터(가짜)' : ''} · 걷는 시간은 OpenStreetMap 길 데이터(ODbL) 기반 대략값 · 지도 © ${mapEngine === 'kakao' ? 'Kakao' : 'OpenStreetMap 기여자'}`;
 
   go('start', { focus: false });
   route();

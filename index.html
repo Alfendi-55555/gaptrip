@@ -157,7 +157,7 @@
               </select>
             </label>
           </div>
-          <p class="hint">시간은 직선거리로 어림한 <strong>대략값</strong>이에요. 머물 수 있는 시간이 10분이 안 되는 곳과 그 시간에 문을 닫는 곳은 뺐어요.</p>
+          <p class="hint">걷는 시간은 OpenStreetMap 길 데이터로 계산한 <strong>대략값</strong>이에요(지금은 한국외대 주변만, 그 밖은 직선거리 어림). 머물 수 있는 시간이 10분이 안 되는 곳과 그 시간에 문을 닫는 곳은 뺐어요.</p>
           <ul id="result-list" class="result-list"></ul>
           <p id="data-date" class="hint data-date"></p>
         </section>
@@ -193,6 +193,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script src="config.js"></script>
   <script src="hours.js"></script>
+  <script src="walk.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
