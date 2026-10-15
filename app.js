@@ -37,7 +37,7 @@ const state = {
   meta: null,
   isSample: false,
   dataOk: false,
-  store: { favorites: [], stayMin: 30, records: [] },
+  store: { favorites: [], records: [] },
   // 지금 떠나기 단계에서 고르는 값
   draft: { origin: null, dest: null, destMode: 'return' },
   here: null,       // 현재 위치 { lat, lng, demo } — 저장하지 않음
@@ -183,7 +183,6 @@ function loadStore() {
     const s = JSON.parse(raw);
     state.store = {
       favorites: Array.isArray(s.favorites) ? s.favorites : [],
-      stayMin: [15, 30, 60].includes(s.stayMin) ? s.stayMin : 30,
       records: Array.isArray(s.records) ? s.records : [],
     };
     return true;
