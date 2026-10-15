@@ -66,27 +66,35 @@
         <!-- 2 시간 -->
         <section data-view="time" aria-labelledby="v-time-h" hidden>
           <p class="stepper"></p>
-          <h2 id="v-time-h" tabindex="-1">몇 시까지 시간이 있나요?</h2>
-          <label for="deadline">이 시각까지 도착지에 닿을게요</label>
-          <div class="row">
-            <input id="deadline" type="time" aria-describedby="deadline-err deadline-hint">
-          </div>
-          <div class="quick" role="group" aria-label="빠르게 고르기">
-            <button type="button" class="chip" data-add="30">+30분</button>
-            <button type="button" class="chip" data-add="60">+1시간</button>
-            <button type="button" class="chip" data-add="120">+2시간</button>
-          </div>
-          <p id="deadline-hint" class="hint">지금은 <span id="now-label">--:--</span></p>
-          <p id="deadline-err" class="field-err" hidden></p>
-
-          <fieldset class="stay">
-            <legend>가서 얼마나 머물까요?</legend>
+          <h2 id="v-time-h" tabindex="-1">언제까지 돌아와야 하나요?</h2>
+          <fieldset>
+            <legend class="visually-hidden">돌아올 시각</legend>
             <div class="seg">
-              <label><input type="radio" name="stay" value="15"> 15분</label>
-              <label><input type="radio" name="stay" value="30" checked> 30분</label>
-              <label><input type="radio" name="stay" value="60"> 60분</label>
+              <label><input type="radio" name="deadlineMode" value="set" checked> 시각 정하기</label>
+              <label><input type="radio" name="deadlineMode" value="none"> 딱히 없어요</label>
             </div>
           </fieldset>
+
+          <div id="deadline-box" class="deadline-box">
+            <label for="deadline">이 시각까지 도착지에 닿을게요</label>
+            <div class="row time-row">
+              <input id="deadline" type="time" step="300" aria-describedby="deadline-err deadline-left deadline-hint">
+              <span id="deadline-left" class="left"></span>
+            </div>
+            <label for="deadline-range" class="visually-hidden">지금부터 남은 시간</label>
+            <input id="deadline-range" class="range" type="range" min="20" max="600" step="10" value="20" aria-describedby="deadline-left">
+            <div class="quick" role="group" aria-label="빠르게 고르기">
+              <button type="button" class="chip" data-add="30">+30분</button>
+              <button type="button" class="chip" data-add="60">+1시간</button>
+              <button type="button" class="chip" data-add="90">+1시간 30분</button>
+              <button type="button" class="chip" data-add="120">+2시간</button>
+              <button type="button" class="chip" data-add="180">+3시간</button>
+              <button type="button" class="chip" data-add="240">+4시간</button>
+            </div>
+            <p id="deadline-hint" class="hint">지금은 <span id="now-label">--:--</span> · 시각을 직접 입력하거나 막대를 움직여도 돼요.</p>
+            <p id="deadline-err" class="field-err" hidden></p>
+          </div>
+          <p id="nodeadline-hint" class="hint nodeadline" hidden>지금 열려 있고 걸어서 30분 안에 갈 수 있는 곳을, 닫을 때까지 머물 수 있는 시간과 함께 보여 드려요. 도착지는 고르지 않아도 돼요.</p>
           <div class="step-nav">
             <button type="button" class="btn" data-prev>이전</button>
             <button type="button" class="btn btn-primary" data-next="time">다음</button>
@@ -118,7 +126,7 @@
           <dl class="summary">
             <div><dt>출발</dt><dd id="sum-origin"></dd><dd><button type="button" class="link" data-go="origin" aria-label="출발지 바꾸기">바꾸기</button></dd></div>
             <div><dt>시간</dt><dd id="sum-time"></dd><dd><button type="button" class="link" data-go="time" aria-label="시간 바꾸기">바꾸기</button></dd></div>
-            <div><dt>도착</dt><dd id="sum-dest"></dd><dd><button type="button" class="link" data-go="dest" aria-label="도착지 바꾸기">바꾸기</button></dd></div>
+            <div id="sum-dest-row"><dt>도착</dt><dd id="sum-dest"></dd><dd><button type="button" class="link" data-go="dest" aria-label="도착지 바꾸기">바꾸기</button></dd></div>
           </dl>
           <div class="step-nav">
             <button type="button" class="btn" data-prev>이전</button>
@@ -145,11 +153,11 @@
             <label class="sort"><span class="visually-hidden">정렬</span>
               <select id="sort">
                 <option value="near">이동 짧은 순</option>
-                <option value="slack">여유 많은 순</option>
+                <option value="stay">머무는 시간 긴 순</option>
               </select>
             </label>
           </div>
-          <p class="hint">시간은 직선거리로 어림한 <strong>대략값</strong>이에요.</p>
+          <p class="hint">시간은 직선거리로 어림한 <strong>대략값</strong>이에요. 머물 수 있는 시간이 10분이 안 되는 곳과 그 시간에 문을 닫는 곳은 뺐어요.</p>
           <ul id="result-list" class="result-list"></ul>
           <p id="data-date" class="hint data-date"></p>
         </section>
@@ -184,6 +192,7 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script src="config.js"></script>
+  <script src="hours.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

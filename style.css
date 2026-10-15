@@ -340,3 +340,14 @@ input[aria-invalid="true"] { border-color: var(--err); box-shadow: 0 0 0 1px var
 }
 .kme-dot { width: 18px; height: 18px; border-radius: 50%; background: var(--ink); border: 3px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.3); }
 @media (prefers-reduced-motion: reduce) { .kmarker { transition: none; } }
+
+/* 돌아올 시각 고르기 */
+.deadline-box { margin-top: 16px; }
+.time-row { align-items: center; }
+.time-row input[type="time"] { flex: 0 1 auto; }
+.left { font-weight: 700; color: var(--accent); }
+.range { width: 100%; margin: 14px 0 2px; accent-color: var(--accent); min-height: 28px; }
+.nodeadline { margin-top: 16px; padding: 10px 12px; background: var(--bg); border-radius: 10px; }
+.result-row .stay { display: block; margin-top: 4px; font-weight: 700; color: var(--free); }
+.result-row .stay small { font-weight: 500; color: var(--muted); }
+.result-row .stay.unknown { color: var(--warn); }

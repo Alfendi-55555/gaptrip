@@ -174,6 +174,7 @@ function normLibraries(rows) {
       ...c,
       isFree: true,
       ...(clean(r.OP_TIME) && { hours: clean(r.OP_TIME, 100) }),
+      ...(closed && { closed }),
       notes: [closed && `휴관: ${closed}`, '열람실 이용 조건은 도서관마다 달라요'].filter(Boolean),
       url: url(r.HMPG_URL),
     });

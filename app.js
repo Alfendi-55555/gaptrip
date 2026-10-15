@@ -18,7 +18,10 @@ const SEOUL = [37.5665, 126.978];
 // 확인용 가정 위치: 주소에 ?at=hufs 를 붙이면 한국외대 서울캠퍼스를 현재 위치로 가정함
 // (외대 밖에서 화면을 확인하거나 발표할 때용). 없으면 브라우저의 실제 위치를 씀.
 const DEMO_HERE = { lat: 37.5972, lng: 127.0589, name: '한국외대 서울캠퍼스' };
-const NEARBY_MIN = 30; // 홈에서 '근처'로 세는 편도 도보 시간
+const NEARBY_MIN = 30; // '딱히 없어요'와 홈 안내에서 '근처'로 보는 편도 도보 시간
+const MIN_STAY = 10;   // 머물 수 있는 시간이 이보다 짧으면 결과에서 뺌
+const MIN_WINDOW = 20; // 돌아올 시각까지 최소 이만큼은 남아야 찾아봄
+const MAX_WAIT = 30;   // '딱히 없어요'일 때, 도착 후 이 안에 여는 곳까지만 포함
 const COLORS = { event: '#8a2f6b', place: '#1f5c8a', me: '#1d1b18' };
 
 const $ = (id) => document.getElementById(id);
@@ -40,7 +43,8 @@ const state = {
   here: null,       // 현재 위치 { lat, lng, demo } — 저장하지 않음
   hereState: 'pending', // pending | ok | fail
   flow: ['origin', 'time', 'dest', 'confirm'],
-  plan: null,       // { origin, dest, deadlineMin, stayMin, nowMin }
+  plan: null,       // { origin, dest, destMode, hasDeadline, deadlineMin, nowMin }
+  flowHasOrigin: false,
   computed: null,   // 계산 결과(필터 전)
   view: 'start',
   detailFrom: 'start',
@@ -82,18 +86,92 @@ function haversineKm(a, b) {
 const walkMin = (km) => Math.max(1, Math.round((km * DETOUR / WALK_KMH) * 60));
 const isOpenToday = (p) => p.kind !== 'event' || (p.startDate <= todayStr() && todayStr() <= p.endDate);
 
+// 원본에서 휴관일을 따로 받지 못한 예전 데이터는 특이사항의 '휴관: ...'에서 읽음
+const closedText = (p) => p.closed || (p.notes || []).find((n) => n.startsWith('휴관: '))?.slice(4) || '';
+
+// 장소마다: 가는 시간, 오늘 운영 구간, 실제로 머물 수 있는 시간(도착~나와야 하는 시각/닫는 시각)
 function compute(plan) {
+  const date = nowDate();
   const out = [];
   for (const p of state.places) {
     if (!isOpenToday(p)) continue;
     const km = haversineKm(plan.origin, p);
     const go = walkMin(km);
-    const back = walkMin(haversineKm(p, plan.dest));
-    const total = go + plan.stayMin + back;
-    const slack = plan.deadlineMin - (plan.nowMin + total);
-    out.push({ ...p, km, go, back, total, slack, reachable: slack >= 0 });
+    const back = plan.hasDeadline ? walkMin(haversineKm(p, plan.dest)) : 0;
+    const arrive = plan.nowMin + go;
+    const leaveBy = plan.hasDeadline ? plan.deadlineMin - back : null;
+    const sched = GapHours.todaySchedule({ hours: p.hours, closed: closedText(p) }, date);
+    const r = { ...p, km, go, back, arrive, leaveBy, sched, reachable: false };
+
+    if (!plan.hasDeadline && go > NEARBY_MIN) { r.why = 'far'; out.push(r); continue; }
+    if (plan.hasDeadline && leaveBy - arrive < MIN_STAY) { r.why = 'time'; out.push(r); continue; }
+    if (sched.closedToday) { r.why = 'closed'; out.push(r); continue; }
+
+    if (!sched.known) {
+      // 운영시간을 못 읽음: 시간만으로 판단하고 '운영시간 확인 필요' 표시
+      Object.assign(r, { from: arrive, until: leaveBy, limit: plan.hasDeadline ? 'deadline' : 'unknown', wait: 0 });
+      r.stay = plan.hasDeadline ? leaveBy - arrive : null;
+      r.reachable = r.stay == null || r.stay >= MIN_STAY;
+      if (!r.reachable) r.why = 'time';
+      out.push(r);
+      continue;
+    }
+
+    let best = null;
+    for (const w of sched.windows) {
+      let from, until, limit, startOnly = false;
+      if (w.end == null) {
+        // 시작 시각만 아는 공연: 시작 전에 도착해야 함
+        if (arrive > w.start) continue;
+        from = w.start;
+        startOnly = true;
+        until = leaveBy;
+        limit = plan.hasDeadline ? 'deadline' : 'unknown';
+      } else {
+        from = Math.max(arrive, w.start);
+        if (plan.hasDeadline && leaveBy < w.end) { until = leaveBy; limit = 'deadline'; }
+        else { until = w.end; limit = 'close'; }
+      }
+      const wait = from - arrive;
+      if (!plan.hasDeadline && wait > MAX_WAIT) continue;
+      const stay = until == null ? null : until - from;
+      if (stay != null && stay < MIN_STAY) continue;
+      const cand = { from, until, stay, limit, startOnly, wait };
+      if (!best || (cand.stay ?? Infinity) > (best.stay ?? Infinity)) best = cand;
+    }
+    if (best) Object.assign(r, best, { reachable: true });
+    else r.why = 'hours';
+    out.push(r);
   }
   return out;
+}
+
+// 머물 수 있는 시간 문구: { main, sub, unknown }
+function stayText(c) {
+  const subs = [];
+  let main;
+  if (c.startOnly) {
+    main = `${fmtHM(c.from)} 시작`;
+    if (c.stay != null) subs.push(`${fmtHM(c.until)}엔 나와야 해요 · 최대 ${fmtDur(c.stay)}`);
+    else subs.push('끝나는 시각은 방문 전 확인');
+  } else if (c.stay == null) {
+    main = '머무는 시간은 자유';
+  } else {
+    main = `머물 수 있는 시간 ${fmtDur(c.stay)}`;
+    if (c.wait > 0) subs.push(`${fmtHM(c.from)}에 열어요`);
+    if (c.limit === 'close') subs.push(`${fmtHM(c.until)}에 닫아요`);
+    if (c.limit === 'deadline') subs.push(`${fmtHM(c.until)}엔 나와야 해요`);
+  }
+  const unknown = !c.sched.known;
+  if (unknown) subs.push('운영시간 확인 필요');
+  return { main, sub: subs.join(' · '), unknown };
+}
+
+// 오늘 운영 정보 한 줄
+function scheduleText(sched) {
+  if (!sched.known) return '읽지 못했어요 · 방문 전 확인하세요';
+  if (sched.closedToday) return sched.reason;
+  return `오늘 ${sched.windows.map((w) => w.end == null ? `${fmtHM(w.start)} 시작` : `${fmtHM(w.start)}~${fmtHM(w.end)}`).join(', ')}`;
 }
 
 /* ---------- 저장 (localStorage) ---------- */
@@ -158,10 +236,21 @@ function clearErr(errId, inputId) {
 const VIEWS = ['start', 'origin', 'time', 'dest', 'confirm', 'results', 'detail'];
 const STEP_NAMES = { origin: '출발지', time: '시간', dest: '도착지', confirm: '확인' };
 
-// 현재 위치를 이미 알면 출발지 단계를 건너뛰고 3단계로 진행
+// 현재 위치를 이미 알면 출발지 단계를, 돌아올 시각이 없으면 도착지 단계를 건너뜀
+const hasDeadline = () => document.querySelector('input[name="deadlineMode"]:checked').value === 'set';
+function computeFlow() {
+  return [...(state.flowHasOrigin ? ['origin'] : []), 'time', ...(hasDeadline() ? ['dest'] : []), 'confirm'];
+}
 function startFlow() {
-  state.flow = state.draft.origin ? ['time', 'dest', 'confirm'] : ['origin', 'time', 'dest', 'confirm'];
+  state.flowHasOrigin = !state.draft.origin;
+  state.flow = computeFlow();
   go(state.flow[0]);
+}
+function updateStepper(view) {
+  const stepper = document.querySelector(`[data-view="${view}"] .stepper`);
+  if (!stepper) return;
+  const i = state.flow.indexOf(view);
+  stepper.textContent = i < 0 ? '출발지 바꾸기' : `${i + 1} / ${state.flow.length} · ${STEP_NAMES[view]}`;
 }
 function goPrev() {
   const i = state.flow.indexOf(state.view);
@@ -177,11 +266,8 @@ function go(view, { focus = true } = {}) {
     if (state.here) panTo(state.here, 15);
   }
   if (view === 'origin') renderPicker('origin');
-  const stepper = document.querySelector(`[data-view="${view}"] .stepper`);
-  if (stepper) {
-    const i = state.flow.indexOf(view);
-    stepper.textContent = i < 0 ? '출발지 바꾸기' : `${i + 1} / ${state.flow.length} · ${STEP_NAMES[view]}`;
-  }
+  updateStepper(view);
+  if (view === 'time') syncDeadlineUI();
   if (view === 'dest') { syncDestMode(); renderPicker('dest'); }
   if (view === 'confirm') renderSummary();
   setSheet(view === 'start' ? 'normal' : 'expanded');
@@ -200,7 +286,7 @@ function onNext(step) {
     go('time');
   } else if (step === 'time') {
     if (!checkDeadline()) return;
-    go('dest');
+    go(hasDeadline() ? 'dest' : 'confirm');
   } else if (step === 'dest') {
     clearErr('dest-pick-err');
     if (state.draft.destMode === 'other' && !state.draft.dest) {
@@ -220,7 +306,10 @@ function renderSummary() {
   const d = state.draft;
   $('sum-origin').textContent = d.origin?.label || '—';
   const dl = parseHM($('deadline').value);
-  $('sum-time').textContent = dl === null ? '—' : `${fmtHM(dl)}까지 · 머무는 시간 ${currentStay()}분`;
+  const now = toMin(nowDate());
+  $('sum-time').textContent = !hasDeadline() ? '정해진 시각 없음 · 지금 열린 곳'
+    : dl === null ? '—' : `${fmtHM(dl)}까지 (지금부터 ${fmtSpan(dl - now)})`;
+  $('sum-dest-row').hidden = !hasDeadline();
   $('sum-dest').textContent = d.destMode === 'return' ? `출발지로 돌아오기 (${d.origin?.label || '—'})` : (d.dest?.label || '—');
 }
 
@@ -450,9 +539,9 @@ function renderHere() {
     line.append(o.type === 'geo' ? '📍 지금 여기서 출발해요' : `🚉 ${o.label}에서 출발해요`,
       el('small', { textContent: `${where}${st ? ` · ${st.name}역 걸어서 ${fmtDur(st.min)}` : ''}` }));
     btn.textContent = '출발지 바꾸기';
-    const near = state.places.filter((p) => isOpenToday(p) && walkMin(haversineKm(o, p)) <= NEARBY_MIN);
+    const near = compute({ origin: o, hasDeadline: false, nowMin: toMin(nowDate()) }).filter((p) => p.reachable);
     const ev = near.filter((p) => p.kind === 'event').length;
-    $('today-count').textContent = `걸어서 ${NEARBY_MIN}분 안에 오늘 열린 행사 ${ev}곳, 상시 장소 ${near.length - ev}곳이 있어요. 몇 시까지 시간이 있는지만 알려 주세요.`;
+    $('today-count').textContent = `걸어서 ${NEARBY_MIN}분 안에 지금 열려 있거나 곧 여는 곳이 ${near.length}곳(행사 ${ev} · 장소 ${near.length - ev}) 있어요. 언제까지 시간이 있는지 알려 주시면 그 안에 다녀올 곳만 골라 드려요.`;
   } else if (state.hereState === 'pending') {
     line.textContent = '📍 현재 위치를 확인하는 중…';
   } else {
@@ -481,21 +570,63 @@ function syncDestMode() {
   renderMapMe();
 }
 
-/* ---------- 언제까지 입력 검증 ---------- */
+/* ---------- 언제까지: 입력·검증 ---------- */
 
-const currentStay = () => +document.querySelector('input[name="stay"]:checked').value;
+// '1시간 40분' (약 없이)
+function fmtSpan(min) {
+  if (min < 60) return `${min}분`;
+  const h = Math.floor(min / 60), r = min % 60;
+  return r ? `${h}시간 ${r}분` : `${h}시간`;
+}
+const LAST_MIN = 23 * 60 + 55; // 오늘 고를 수 있는 마지막 시각
+
+function syncDeadlineUI() {
+  const set = hasDeadline();
+  $('deadline-box').hidden = !set;
+  $('nodeadline-hint').hidden = set;
+  if (!set) clearErr('deadline-err', 'deadline');
+  state.flow = computeFlow();
+  updateStepper('time');
+  syncRange();
+}
+
+// 시각 입력칸 ↔ 막대 ↔ '지금부터 ○ 뒤' 맞추기
+function syncRange() {
+  const now = toMin(nowDate());
+  const range = $('deadline-range');
+  const max = Math.floor((LAST_MIN - now) / 10) * 10;
+  range.disabled = max < MIN_WINDOW;
+  range.max = String(Math.max(MIN_WINDOW, max));
+  const v = parseHM($('deadline').value);
+  if (v !== null && v > now) {
+    range.value = String(Math.min(max, Math.max(MIN_WINDOW, v - now)));
+    $('deadline-left').textContent = `지금부터 ${fmtSpan(v - now)} 뒤`;
+  } else {
+    range.value = String(MIN_WINDOW);
+    $('deadline-left').textContent = range.disabled ? '오늘은 시간이 얼마 안 남았어요' : '';
+  }
+  range.setAttribute('aria-valuetext', $('deadline-left').textContent || '시각을 고르지 않았어요');
+}
+
+function onRange() {
+  const now = toMin(nowDate());
+  const target = Math.min(LAST_MIN, Math.ceil((now + +$('deadline-range').value) / 5) * 5);
+  $('deadline').value = fmtHM(target);
+  clearErr('deadline-err', 'deadline');
+  syncRange();
+}
 
 function validateDeadline() {
+  if (!hasDeadline()) return null;
   const now = toMin(nowDate());
-  const stay = currentStay();
   const v = parseHM($('deadline').value);
-  if (v === null) return '몇 시까지 시간이 있는지 알려 주세요.';
+  if (v === null) return '몇 시까지 시간이 있는지 알려 주세요. 정해진 시각이 없으면 ‘딱히 없어요’를 고르세요.';
   if (v <= now) {
     // 밤늦게 이른 새벽 시각을 고르면 '내일'을 뜻한 것으로 봄
     if (now >= 18 * 60 && v < 6 * 60) return '오늘 안의 시각으로 골라 주세요. (자정 전까지만 찾을 수 있어요)';
     return '지금보다 늦은 시각을 골라 주세요.';
   }
-  if (v - now < stay) return `시간이 너무 짧아요. ${stay}분 이상 남았을 때 찾아볼 수 있어요.`;
+  if (v - now < MIN_WINDOW) return `시간이 너무 짧아요. ${MIN_WINDOW}분 이상 남았을 때 찾아볼 수 있어요.`;
   return null;
 }
 function checkDeadline() {
@@ -512,11 +643,13 @@ function onQuickAdd(e) {
   clearErr('deadline-err', 'deadline');
   if (target >= 24 * 60) {
     $('deadline').value = '';
+    syncRange();
     showErr('deadline-err', '오늘 안의 시각으로 골라 주세요. (자정 전까지만 찾을 수 있어요)', 'deadline');
     $('deadline').focus();
     return;
   }
   $('deadline').value = fmtHM(target);
+  syncRange();
 }
 
 /* ---------- 찾기 ---------- */
@@ -529,11 +662,12 @@ function runSearch() {
   // 확인 화면에 머무는 사이 시각이 지났을 수 있으니 다시 검사
   if (validateDeadline()) { go('time'); checkDeadline(); return; }
   const d = state.draft;
+  const withDeadline = hasDeadline();
   if (!d.origin) { go('origin'); onNext('origin'); return; }
-  if (d.destMode === 'other' && !d.dest) { go('dest'); onNext('dest'); return; }
+  if (withDeadline && d.destMode === 'other' && !d.dest) { go('dest'); onNext('dest'); return; }
   state.plan = {
-    origin: d.origin, dest: destOf(d), destMode: d.destMode,
-    deadlineMin: parseHM($('deadline').value), stayMin: currentStay(), nowMin: toMin(nowDate()),
+    origin: d.origin, dest: withDeadline ? destOf(d) : null, destMode: d.destMode, hasDeadline: withDeadline,
+    deadlineMin: withDeadline ? parseHM($('deadline').value) : null, nowMin: toMin(nowDate()),
   };
   state.computed = compute(state.plan);
   go('results', { focus: false });
@@ -549,7 +683,7 @@ function visibleResults() {
     .filter((p) => p.reachable)
     .filter((p) => !freeOnly || p.isFree)
     .filter((p) => kind === 'all' || p.kind === kind)
-    .sort((a, b) => sortBy === 'slack' ? b.slack - a.slack : a.go - b.go);
+    .sort((a, b) => sortBy === 'stay' ? (b.stay ?? -1) - (a.stay ?? -1) || a.go - b.go : a.go - b.go);
 }
 
 function renderResults({ keepStatus } = {}) {
@@ -561,8 +695,11 @@ function renderResults({ keepStatus } = {}) {
   const reachable = state.computed.filter((p) => p.reachable);
 
   $('results-count').textContent = `${shown.length}곳`;
-  $('results-summary').textContent =
-    `${plan.origin.label} 출발 → ${fmtHM(plan.deadlineMin)}까지 ${plan.destMode === 'return' ? '출발지로 복귀' : plan.dest.label + ' 도착'} · 머무는 시간 ${plan.stayMin}분`;
+  const closedNow = state.computed.filter((p) => p.why === 'closed' || p.why === 'hours').length;
+  $('results-summary').textContent = (plan.hasDeadline
+    ? `${plan.origin.label} 출발 → ${fmtHM(plan.deadlineMin)}까지 ${plan.destMode === 'return' ? '출발지로 복귀' : plan.dest.label + ' 도착'}`
+    : `${plan.origin.label} 출발 · 돌아올 시각 없음 · 걸어서 ${NEARBY_MIN}분 안`)
+    + (closedNow ? ` · 그 시간에 운영하지 않는 ${closedNow}곳은 뺐어요` : '');
   renderDataDate();
 
   if (!shown.length) {
@@ -571,13 +708,13 @@ function renderResults({ keepStatus } = {}) {
     } else {
       const nearest = state.computed.reduce((m, p) => Math.min(m, p.km), Infinity);
       const farAway = nearest > 15;
-      say('empty',
-        farAway ? '출발지 근처에 찾아본 정보가 없어요. 지금은 서울 안의 정보만 있어요.' : '이 시간 안에 다녀올 곳이 없어요.',
-        farAway ? '서울 안의 역을 출발지로 골라 보세요.' : '시각을 늦추거나 머무는 시간을 줄여 보세요.');
+      if (farAway) say('empty', '출발지 근처에 찾아본 정보가 없어요. 지금은 서울 안의 정보만 있어요.', '서울 안의 역을 출발지로 골라 보세요.');
+      else if (plan.hasDeadline) say('empty', `이 시간 안에 ${MIN_STAY}분 이상 머물 수 있는 곳이 없어요.`, '돌아올 시각을 늦추거나 도착지를 바꿔 보세요.');
+      else say('empty', `지금 열려 있고 걸어서 ${NEARBY_MIN}분 안에 갈 곳이 없어요.`, '돌아올 시각을 정하면 조금 먼 곳이나 나중에 여는 곳도 찾아볼 수 있어요.');
     }
     list.append(el('li', { className: 'none', textContent: '조건에 맞는 곳이 없어요.' }));
   } else {
-    say('ok', `${fmtHM(plan.deadlineMin)}까지 다녀올 수 있는 곳 ${shown.length}곳을 찾았어요.`);
+    say('ok', plan.hasDeadline ? `${fmtHM(plan.deadlineMin)}까지 다녀올 수 있는 곳 ${shown.length}곳을 찾았어요.` : `지금 갈 수 있는 곳 ${shown.length}곳을 찾았어요.`);
     for (const p of shown) list.append(resultItem(p));
   }
   renderMapPlaces(shown, { fit: true });
@@ -597,11 +734,17 @@ function resultItem(p) {
     el('span', { className: 'title', textContent: p.title }),
     el('span', { className: 'line' }, '🕘 ', el('b', { textContent: p.hours || '운영시간은 방문 전 확인하세요' })),
     note ? el('span', { className: 'line', textContent: `특이사항 · ${note}` }) : null,
-    el('span', { className: 'line', textContent: `가는 데 ${fmtDur(p.go)} · 여유 ${fmtDur(p.slack)}` }),
+    el('span', { className: 'line', textContent: `가는 데 ${fmtDur(p.go)} · 도착 약 ${fmtHM(p.arrive)}` }),
+    stayLine(p),
     el('span', { className: 'more', textContent: '자세히 보기 →' }));
   btn.dataset.id = p.id;
   btn.addEventListener('click', () => openDetail(p.id));
   return el('li', {}, btn);
+}
+
+function stayLine(c) {
+  const t = stayText(c);
+  return el('span', { className: `stay${t.unknown ? ' unknown' : ''}` }, t.main, t.sub ? el('small', { textContent: ` · ${t.sub}` }) : null);
 }
 
 function renderDataDate() {
@@ -641,6 +784,9 @@ function openDetail(id) {
   const info = el('dl', { className: 'info' });
   const addInfo = (k, v) => info.append(el('dt', { textContent: k }), el('dd', { textContent: v }));
   addInfo('운영시간', p.hours || '정보 없음 · 방문 전 확인하세요');
+  const sched = c?.sched || GapHours.todaySchedule({ hours: p.hours, closed: closedText(p) }, nowDate());
+  addInfo('오늘', scheduleText(sched));
+  if (closedText(p)) addInfo('휴관', closedText(p));
   addInfo('기간', p.kind === 'event'
     ? `${fmtDate(p.startDate)} ~ ${fmtDate(p.endDate)}${p.endDate === todayStr() ? ' (오늘 마지막 날)' : ''}`
     : '상시');
@@ -651,23 +797,40 @@ function openDetail(id) {
   if (p.description) wrap.append(el('p', { className: 'desc', textContent: p.description }));
 
   if (c && state.plan) {
-    const times = el('dl', { className: 'times' });
-    for (const [k, v] of [
+    const plan = state.plan;
+    const why = { closed: sched.reason, hours: '이 시간엔 운영하지 않아요', time: '시간 안에 다녀오기 어려워요', far: `걸어서 ${NEARBY_MIN}분이 넘어요` };
+    const rows = [
       ['가는 데 (걸어서)', fmtDur(c.go)],
-      [state.plan.destMode === 'return' ? '돌아오는 데' : '도착지까지', fmtDur(c.back)],
-      ['도착 예상', `약 ${fmtHM(state.plan.nowMin + c.total)}`],
-      ['여유', c.reachable ? fmtDur(c.slack) : '시간 안에 어려워요'],
-    ]) times.append(el('div', {}, el('dt', { textContent: k }), el('dd', { textContent: v })));
-    wrap.append(el('h3', { textContent: `이동 시간 (머무는 시간 ${state.plan.stayMin}분 포함, 대략값)` }), times);
+      ['도착 예상', `약 ${fmtHM(c.arrive)}`],
+      ['머물 수 있는 시간', !c.reachable ? why[c.why] || '—' : c.startOnly ? `${fmtHM(c.from)} 시작` : c.stay == null ? '자유' : fmtDur(c.stay)],
+    ];
+    if (plan.hasDeadline) {
+      rows.push([plan.destMode === 'return' ? '돌아오는 데' : '도착지까지', fmtDur(c.back)]);
+      if (c.reachable && c.until != null) rows.push(['나와야 하는 시각', `약 ${fmtHM(c.until)}`]);
+    }
+    const times = el('dl', { className: 'times' });
+    for (const [k, v] of rows) times.append(el('div', {}, el('dt', { textContent: k }), el('dd', { textContent: v })));
+    wrap.append(el('h3', { textContent: '이동과 머무는 시간 (대략값)' }), times);
+    if (c.reachable) {
+      const tips = [
+        c.wait > 0 && `${fmtHM(c.from)}에 열어요. 도착해서 약 ${c.wait}분 기다려야 해요.`,
+        c.limit === 'close' && `${fmtHM(c.until)}에 닫아요.`,
+        c.startOnly && c.stay == null && '끝나는 시각은 방문 전 확인하세요.',
+        !c.sched.known && '운영시간을 읽지 못해 이동 시간만으로 계산했어요. 방문 전 확인하세요.',
+      ].filter(Boolean);
+      if (tips.length) wrap.append(el('p', { className: 'hint', textContent: tips.join(' ') }));
+    }
     if (c.go > TRANSIT_TIP_MIN || c.back > TRANSIT_TIP_MIN) {
       wrap.append(el('p', { className: 'transit-tip', textContent: '🚇 걸어서 20분이 넘어요. 대중교통이 더 빠를 수 있어요.' }));
     }
+    if (/공휴일/.test(closedText(p))) wrap.append(el('p', { className: 'hint', textContent: '법정 공휴일·임시 휴관은 반영하지 않았어요.' }));
   } else {
     wrap.append(el('p', { className: 'hint', textContent: '‘지금 떠나기’에서 조건을 고르면 이동 시간과 여유 시간을 계산해 드려요.' }));
   }
 
-  if (p.notes?.length) {
-    wrap.append(el('h3', { textContent: '특이사항' }), el('ul', { className: 'notes' }, ...p.notes.map((n) => el('li', { textContent: n }))));
+  const notes = (p.notes || []).filter((n) => !n.startsWith('휴관: ')); // 휴관은 위 정보에 이미 표시
+  if (notes.length) {
+    wrap.append(el('h3', { textContent: '특이사항' }), el('ul', { className: 'notes' }, ...notes.map((n) => el('li', { textContent: n }))));
   }
   if (p.subEvents?.length) {
     wrap.append(el('h3', { textContent: p.kind === 'event' ? '세부 프로그램' : '진행 중인 프로그램' }),
@@ -715,7 +878,8 @@ function closeDetail() {
 /* ---------- 나들이 기록 ---------- */
 
 function addRecord(p, c) {
-  const rec = { placeId: p.id, title: p.title, venue: p.venue, date: todayStr(), plannedMin: c?.total ?? null };
+  const plannedMin = c?.reachable ? c.go + (c.stay ?? 0) + c.back : null;
+  const rec = { placeId: p.id, title: p.title, venue: p.venue, date: todayStr(), plannedMin };
   state.store.records.unshift(rec);
   if (!saveStore()) { state.store.records.shift(); return; }
   setStatus('ok', `‘${p.title}’ 나들이를 기록했어요. 위쪽 ‘나들이 기록’ 탭에서 볼 수 있어요.`);
@@ -880,7 +1044,7 @@ function renderMapPlaces(list, { fit }) {
   }
   if (fit) {
     const pts = list.slice();
-    if (state.plan) pts.push(state.plan.origin, state.plan.dest);
+    if (state.plan) pts.push(state.plan.origin, ...(state.plan.dest ? [state.plan.dest] : []));
     if (!pts.length) return;
     if (mapEngine === 'kakao') {
       const bounds = new kakao.maps.LatLngBounds();
@@ -996,9 +1160,8 @@ async function fetchJson(url) {
 async function init() {
   setStatus('loading', '근처 정보를 불러오는 중이에요');
   const storeOk = loadStore();
-  document.querySelectorAll('input[name="stay"]').forEach((r) => { r.checked = +r.value === state.store.stayMin; });
 
-  const tickNow = () => { $('now-label').textContent = fmtHM(toMin(nowDate())); };
+  const tickNow = () => { $('now-label').textContent = fmtHM(toMin(nowDate())); if (state.view === 'time') syncRange(); };
   tickNow();
   setInterval(tickNow, 30000);
 
@@ -1008,19 +1171,17 @@ async function init() {
 
   // 이벤트 연결
   $('btn-start').addEventListener('click', startFlow);
-  $('btn-change-origin').addEventListener('click', () => { state.flow = ['origin', 'time', 'dest', 'confirm']; go('origin'); });
+  $('btn-change-origin').addEventListener('click', () => { state.flowHasOrigin = true; state.flow = computeFlow(); go('origin'); });
   document.querySelectorAll('[data-prev]').forEach((b) => b.addEventListener('click', goPrev));
   document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => go(b.dataset.go)));
   document.querySelectorAll('[data-next]').forEach((b) => b.addEventListener('click', () => onNext(b.dataset.next)));
   $('btn-search').addEventListener('click', runSearch);
   $('btn-detail-back').addEventListener('click', closeDetail);
-  $('deadline').addEventListener('input', () => clearErr('deadline-err', 'deadline'));
+  $('deadline').addEventListener('input', () => { clearErr('deadline-err', 'deadline'); syncRange(); });
+  $('deadline-range').addEventListener('input', onRange);
+  document.querySelectorAll('input[name="deadlineMode"]').forEach((r) => r.addEventListener('change', syncDeadlineUI));
   $('deadline').addEventListener('keydown', (e) => { if (e.key === 'Enter') onNext('time'); });
   document.querySelectorAll('.quick .chip').forEach((b) => b.addEventListener('click', onQuickAdd));
-  document.querySelectorAll('input[name="stay"]').forEach((r) => r.addEventListener('change', () => {
-    state.store.stayMin = currentStay();
-    saveStore();
-  }));
   document.querySelectorAll('input[name="destMode"]').forEach((r) => r.addEventListener('change', syncDestMode));
   const refilter = () => state.computed && renderResults();
   $('f-free').addEventListener('change', refilter);
