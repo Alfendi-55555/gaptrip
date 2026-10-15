@@ -186,9 +186,10 @@ function normLibraries(rows) {
 function normStations(rows) {
   const byName = new Map();
   let noCoords = 0;
+  const missing = new Set();
   for (const r of rows) {
     const c = coords(r.LAT, r.LOT);
-    if (!c) { noCoords++; continue; }
+    if (!c) { noCoords++; missing.add(clean(r.BLDN_NM).replace(/역$/, '')); continue; }
     // '서울역'처럼 이름에 '역'이 붙은 경우 화면에서 '역'을 다시 붙이므로 떼어 둠
     const name = clean(r.BLDN_NM).replace(/역$/, '');
     if (!name) continue;
@@ -197,7 +198,23 @@ function normStations(rows) {
     if (line && !s.lines.includes(line)) s.lines.push(line);
     byName.set(name, s);
   }
-  return { items: [...byName.values()].sort((a, b) => a.name.localeCompare(b.name, 'ko')), skip: { noCoords } };
+  // API에 좌표가 없는 역은 수동 목록(data/stations-manual.json)으로 채움
+  let filled = 0;
+  try {
+    const manual = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'stations-manual.json'), 'utf8')).items;
+    for (const m of manual) {
+      if (byName.has(m.name)) continue;
+      byName.set(m.name, { ...m, approx: true });
+      filled++;
+    }
+  } catch (e) {
+    console.warn(`수동 역 목록을 읽지 못했어요: ${e.message}`);
+  }
+  const stillMissing = [...missing].filter((n) => n && !byName.has(n));
+  return {
+    items: [...byName.values()].sort((a, b) => a.name.localeCompare(b.name, 'ko')),
+    skip: { noCoords, filled, stillMissing },
+  };
 }
 
 /* ---------- 실행 ---------- */
@@ -228,7 +245,10 @@ function write(file, data) {
 
   console.log(`행사: ${events.items.length}건 저장 · 제외 — 끝남 ${events.skip.ended}, ${EVENT_AHEAD_DAYS}일 이후 시작 ${events.skip.later}, 좌표 없음/범위 밖 ${events.skip.noCoords}, 날짜 오류 ${events.skip.badDate}, 중복 ${events.skip.dup}`);
   console.log(`도서관: ${libs.items.length}건 저장 · 좌표 없음/범위 밖 ${libs.skip.noCoords}건 제외`);
-  console.log(`지하철역: ${stations.items.length}곳 저장 · 좌표 없음 ${stations.skip.noCoords}건 제외`);
+  console.log(`지하철역: ${stations.items.length}곳 저장 · API 좌표 없음 ${stations.skip.noCoords}건 · 수동 목록으로 채움 ${stations.skip.filled}곳`);
+  if (stations.skip.stillMissing.length) {
+    console.log(`  좌표를 못 구한 역 ${stations.skip.stillMissing.length}곳: ${stations.skip.stillMissing.join(', ')}`);
+  }
 
   write('places.json', [...events.items, ...libs.items]);
   write('stations.json', { items: stations.items });
@@ -244,6 +264,7 @@ function write(file, data) {
       event: events.items.length,
       place: libs.items.length,
       station: stations.items.length,
+      stationMissingCoords: stations.skip.stillMissing.length,
       excludedNoCoords: events.skip.noCoords + libs.skip.noCoords,
       excludedEnded: events.skip.ended,
       excludedLater: events.skip.later,

@@ -1,10 +1,10 @@
 // 틈새 나들이 — 중간 MVP 목업
-// 데이터: data/sample-places.json (샘플). 실제 데이터 교체 시 PLACES_URL만 바꾸면 됩니다.
+// 데이터: data/places.json, data/stations.json, data/meta.json — GitHub Actions(scripts/fetch-data.js)가 매일 갱신.
 // 지도: 기본은 Leaflet + OpenStreetMap. config.js의 useKakaoMap이 true면 카카오 지도를 쓰고, 못 불러오면 OSM으로 자동 대체.
 // 목업 확인용: ?map=leaflet 으로 대체 지도를 강제로 볼 수 있음.
 'use strict';
 
-const PLACES_URL = 'data/sample-places.json'; // TODO: 키 발급 후 'data/places.json'
+const PLACES_URL = 'data/places.json';
 const STATIONS_URL = 'data/stations.json';
 const META_URL = 'data/meta.json';
 const STORE_KEY = 'gaptrip.v1';
@@ -15,8 +15,8 @@ const TRANSIT_TIP_MIN = 20; // 편도 도보가 이보다 길면 대중교통 �
 const STALE_DAYS = 2;       // 데이터가 이만큼 지나면 경고
 const FAV_NAME_MAX = 20;
 const SEOUL = [37.5665, 126.978];
-// 목업용 가정 위치: 샘플 데이터가 한국외대 서울캠퍼스 주변이라, 샘플 모드에서는 여기를 현재 위치로 씀.
-// 주소에 ?geo=real 을 붙이면 브라우저의 실제 위치를 씀. (실제 데이터 교체 후 제거)
+// 확인용 가정 위치: 주소에 ?at=hufs 를 붙이면 한국외대 서울캠퍼스를 현재 위치로 가정함
+// (외대 밖에서 화면을 확인하거나 발표할 때용). 없으면 브라우저의 실제 위치를 씀.
 const DEMO_HERE = { lat: 37.5972, lng: 127.0589, name: '한국외대 서울캠퍼스' };
 const NEARBY_MIN = 30; // 홈에서 '근처'로 세는 편도 도보 시간
 const COLORS = { event: '#8a2f6b', place: '#1f5c8a', me: '#1d1b18' };
@@ -396,11 +396,11 @@ function removeFavorite(id) {
 
 /* ---------- 현재 위치 ---------- */
 
-const useDemoHere = () => state.isSample && new URLSearchParams(location.search).get('geo') !== 'real';
+const useDemoHere = () => new URLSearchParams(location.search).get('at') === 'hufs';
 
 function hereSel() {
   const h = state.here;
-  return { type: 'geo', label: h.demo ? `현재 위치 (샘플: ${DEMO_HERE.name})` : '현재 위치', lat: h.lat, lng: h.lng };
+  return { type: 'geo', label: h.demo ? `현재 위치 (가정: ${DEMO_HERE.name})` : '현재 위치', lat: h.lat, lng: h.lng };
 }
 
 // 홈을 열 때 한 번 위치를 찍고, 출발지로 자동 지정
@@ -445,7 +445,7 @@ function renderHere() {
   if (o) {
     const st = nearestStation(o);
     const where = o.type === 'geo'
-      ? (state.here?.demo ? `샘플 위치 · ${DEMO_HERE.name}` : '지금 있는 곳')
+      ? (state.here?.demo ? `가정 위치 · ${DEMO_HERE.name}` : '지금 있는 곳')
       : o.label;
     line.append(o.type === 'geo' ? '📍 지금 여기서 출발해요' : `🚉 ${o.label}에서 출발해요`,
       el('small', { textContent: `${where}${st ? ` · ${st.name}역 걸어서 ${fmtDur(st.min)}` : ''}` }));
@@ -896,7 +896,7 @@ function renderMapPlaces(list, { fit }) {
 function renderMapMe() {
   if (!mapEngine) return;
   const d = state.draft;
-  const hereTip = state.here ? (state.here.demo ? `현재 위치 (샘플: ${DEMO_HERE.name})` : '현재 위치') : '';
+  const hereTip = state.here ? (state.here.demo ? `현재 위치 (가정: ${DEMO_HERE.name})` : '현재 위치') : '';
   const pts = [];
   // 현재 위치가 출발지면 현재 위치 핀이 대신함
   if (d.origin && d.origin.type !== 'geo') pts.push([d.origin, d.destMode === 'return' ? '출발·도착' : '출발']);
