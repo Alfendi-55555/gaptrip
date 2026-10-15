@@ -1,0 +1,124 @@
+{
+  "sample": true,
+  "notice": "샘플(가짜) 데이터입니다. 한국외대 서울캠퍼스(이문동) 주변을 가정해 지어낸 이름·장소·기간·운영시간·소개이며, 서울 열린데이터광장 인증키를 받은 뒤 실제 데이터(data/places.json)로 교체합니다.",
+  "items": [
+    {
+      "id": "evt_s001", "kind": "event", "title": "[샘플] 이문동 골목 사진전", "category": "전시", "venue": "샘플 갤러리 이문",
+      "lat": 37.5985, "lng": 127.0620, "startDate": "2026-10-01", "endDate": "2026-10-31", "isFree": true,
+      "hours": "11:00–20:00 (월 휴관)",
+      "description": "재개발 전 이문동 골목을 10년 동안 기록한 사진 40여 점을 모은 작은 전시입니다. (샘플 소개 문구)",
+      "notes": ["사진 촬영 가능", "주말 오후 혼잡"],
+      "subEvents": [{ "when": "토 15:00", "title": "작가와의 대화 (30분)" }],
+      "url": "https://example.com/sample"
+    },
+    {
+      "id": "evt_s002", "kind": "event", "title": "[샘플] 역 앞 점심 버스킹", "category": "공연", "venue": "샘플 역 광장 무대",
+      "lat": 37.5958, "lng": 127.0632, "startDate": "2026-10-10", "endDate": "2026-10-20", "isFree": true,
+      "hours": "12:00–13:30",
+      "description": "점심시간에 역 앞 광장에서 열리는 짧은 거리 공연입니다. (샘플 소개 문구)",
+      "notes": ["우천 시 취소", "야외 · 좌석 없음"],
+      "subEvents": [{ "when": "12:00", "title": "어쿠스틱 듀오" }, { "when": "12:45", "title": "학생 밴드 공연" }],
+      "url": "https://example.com/sample"
+    },
+    {
+      "id": "evt_s003", "kind": "event", "title": "[샘플] 가을 헌책 장터", "category": "축제", "venue": "샘플 회기 골목",
+      "lat": 37.5905, "lng": 127.0560, "startDate": "2026-10-12", "endDate": "2026-10-18", "isFree": true,
+      "hours": "10:00–18:00",
+      "description": "근처 대학생과 주민이 헌책을 사고팔고 바꾸는 골목 장터입니다. (샘플 소개 문구)",
+      "notes": ["책 교환은 책 1권 지참"],
+      "subEvents": [{ "when": "매일 14:00", "title": "야외 낭독회" }, { "when": "상시", "title": "책 교환 코너" }],
+      "url": "https://example.com/sample"
+    },
+    {
+      "id": "evt_s004", "kind": "event", "title": "[샘플] 미디어아트 특별전", "category": "전시", "venue": "샘플 아트홀 청량리",
+      "lat": 37.5810, "lng": 127.0480, "startDate": "2026-09-01", "endDate": "2026-11-30", "isFree": false,
+      "hours": "10:00–21:00",
+      "description": "빛과 소리로 만든 몰입형 미디어아트 작품 6점을 전시합니다. (샘플 소개 문구)",
+      "notes": ["온라인 예매 시 할인", "관람 약 40분"],
+      "subEvents": [],
+      "url": "https://example.com/sample"
+    },
+    {
+      "id": "evt_s005", "kind": "event", "title": "[샘플] 소극장 낭독극", "category": "공연", "venue": "샘플 소극장 회기",
+      "lat": 37.5935, "lng": 127.0525, "startDate": "2026-10-08", "endDate": "2026-10-26", "isFree": false,
+      "hours": "공연 15:00, 19:30",
+      "description": "배우 세 명이 단편소설을 낭독극으로 꾸민 50분 공연입니다. (샘플 소개 문구)",
+      "notes": ["공연 시작 후 입장 불가", "사전 예약 권장"],
+      "subEvents": [{ "when": "15:00", "title": "낮 공연" }, { "when": "19:30", "title": "저녁 공연" }],
+      "url": "https://example.com/sample"
+    },
+    {
+      "id": "evt_s006", "kind": "event", "title": "[샘플] 지난 전시 (기간 끝남 · 목록에 안 나와야 함)", "category": "전시", "venue": "샘플 갤러리 휘경",
+      "lat": 37.5990, "lng": 127.0600, "startDate": "2026-09-01", "endDate": "2026-09-30", "isFree": true,
+      "hours": "10:00–18:00", "description": "기간이 끝난 행사 확인용 샘플입니다.", "notes": [], "subEvents": [],
+      "url": "https://example.com/sample"
+    },
+    {
+      "id": "evt_s007", "kind": "event", "title": "[샘플] 다음 달 축제 (시작 전 · 목록에 안 나와야 함)", "category": "축제", "venue": "샘플 천변 광장",
+      "lat": 37.5900, "lng": 127.0650, "startDate": "2026-11-05", "endDate": "2026-11-09", "isFree": true,
+      "hours": "11:00–21:00", "description": "아직 시작하지 않은 행사 확인용 샘플입니다.", "notes": [], "subEvents": [],
+      "url": "https://example.com/sample"
+    },
+    {
+      "id": "evt_s008", "kind": "event", "title": "[샘플] 대학가 일러스트 전", "category": "전시", "venue": "샘플 갤러리 신이문",
+      "lat": 37.6010, "lng": 127.0660, "startDate": "2026-10-01", "endDate": "2026-10-25", "isFree": false,
+      "hours": "12:00–19:00 (화 휴관)",
+      "description": "근처 대학 졸업생 일러스트레이터 12명의 단체전입니다. (샘플 소개 문구)",
+      "notes": ["학생증 제시 시 무료"],
+      "subEvents": [{ "when": "금 18:00", "title": "드로잉 워크숍 (선착순 10명)" }],
+      "url": "https://example.com/sample"
+    },
+    {
+      "id": "plc_s001", "kind": "place", "title": "[샘플] 동네 역사 전시관", "category": "박물관", "venue": "샘플 전시관 이문",
+      "lat": 37.6005, "lng": 127.0580, "isFree": true,
+      "hours": "09:00–18:00 (월 휴관)",
+      "description": "이문동·휘경동의 옛 모습을 모형과 사진으로 보여 주는 작은 상설 전시관입니다. (샘플 소개 문구)",
+      "notes": ["물품 보관함 있음"],
+      "subEvents": [{ "when": "매일 11:00, 15:00", "title": "전시 해설 (20분)" }],
+      "url": "https://example.com/sample"
+    },
+    {
+      "id": "plc_s002", "kind": "place", "title": "[샘플] 이문 작은 도서관", "category": "도서관", "venue": "샘플 구립도서관",
+      "lat": 37.5995, "lng": 127.0645, "isFree": true,
+      "hours": "09:00–22:00",
+      "description": "창가 열람석이 있는 조용한 동네 도서관입니다. (샘플 소개 문구)",
+      "notes": ["열람석 누구나 이용 가능", "대출은 회원만"],
+      "subEvents": [],
+      "url": "https://example.com/sample"
+    },
+    {
+      "id": "plc_s003", "kind": "place", "title": "[샘플] 숲길 수목원 산책로", "category": "공원", "venue": "샘플 수목원",
+      "lat": 37.5885, "lng": 127.0445, "isFree": true,
+      "hours": "09:00–17:00 (월 휴원)",
+      "description": "도심 속 오래된 숲을 따라 걷는 1km 남짓한 산책로입니다. (샘플 소개 문구)",
+      "notes": ["음식물 반입 불가"],
+      "subEvents": [{ "when": "이번 주", "title": "가을 단풍 해설 산책" }],
+      "url": "https://example.com/sample"
+    },
+    {
+      "id": "plc_s004", "kind": "place", "title": "[샘플] 생활사 박물관", "category": "박물관", "venue": "샘플 박물관 석관",
+      "lat": 37.6060, "lng": 127.0560, "isFree": false,
+      "description": "옛날 가전제품과 생활용품을 모은 사설 박물관입니다. (샘플 소개 문구)",
+      "notes": ["운영시간 정보 없음 확인용 샘플"],
+      "subEvents": [],
+      "url": "https://example.com/sample"
+    },
+    {
+      "id": "plc_s005", "kind": "place", "title": "[샘플] 천변 산책길", "category": "공원", "venue": "샘플 천변 공원",
+      "lat": 37.5930, "lng": 127.0700, "isFree": true,
+      "description": "하천을 따라 자전거길과 산책길이 이어진 공원입니다. (샘플 소개 문구)",
+      "notes": ["야외 · 24시간", "벤치·화장실 있음"],
+      "subEvents": [],
+      "url": "https://example.com/sample"
+    },
+    {
+      "id": "plc_s006", "kind": "place", "title": "[샘플] 언덕 위 작은 미술관", "category": "미술관", "venue": "샘플 미술관 홍릉",
+      "lat": 37.5925, "lng": 127.0410, "isFree": true,
+      "hours": "11:00–18:00 (월·화 휴관)",
+      "description": "오래된 주택을 고친 작은 전시 공간으로, 신진 작가 개인전을 엽니다. (샘플 소개 문구)",
+      "notes": ["신발 벗고 입장"],
+      "subEvents": [],
+      "url": "https://example.com/sample"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "sample": true,
+  "updated_at": "2026-10-14T05:00:00+09:00",
+  "sources": [
+    { "name": "샘플 데이터 (가짜)", "url": "", "license": "목업용" }
+  ],
+  "counts": { "event": 8, "place": 6, "excludedNoCoords": 0 }
+}

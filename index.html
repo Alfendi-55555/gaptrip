@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>틈새 나들이</title>
+  <meta name="description" content="빈 시간 안에 다녀올 수 있는 근처 행사와 장소를 찾아 줍니다.">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip" href="#panel">‘지금 떠나기’로 건너뛰기</a>
+
+  <header class="top">
+    <h1><a href="#/">틈새 나들이</a></h1>
+    <nav class="tabs" aria-label="페이지">
+      <a href="#/" data-route="home">홈</a>
+      <a href="#/records" data-route="records">나들이 기록</a>
+    </nav>
+  </header>
+
+  <!-- ===== 홈: 지도 + 지금 떠나기 패널 ===== -->
+  <main id="home" class="home">
+    <div class="map-wrap">
+      <div id="map" class="map" role="region" aria-label="지도: 근처 행사와 장소"></div>
+      <p id="map-fallback" class="map-fallback" hidden>지도를 불러오지 못했어요. 목록만으로도 찾을 수 있어요.</p>
+      <div class="legend" aria-hidden="true">
+        <span><i class="dot event"></i>행사</span>
+        <span><i class="dot place"></i>상시 장소</span>
+        <span><i class="dot here"></i>현재 위치</span>
+        <span><i class="dot me"></i>출발·도착 역</span>
+      </div>
+    </div>
+
+    <aside id="panel" class="panel" aria-label="지금 떠나기" tabindex="-1">
+      <button type="button" id="sheet-toggle" class="sheet-toggle" aria-expanded="false" aria-controls="panel-body">
+        <span class="grip" aria-hidden="true"></span><span id="sheet-toggle-label">패널 펼치기</span>
+      </button>
+
+      <div id="panel-body" class="panel-body">
+        <div id="status" class="status" role="status" aria-live="polite"></div>
+
+        <!-- 시작 -->
+        <section data-view="start" aria-labelledby="v-start-h">
+          <h2 id="v-start-h" tabindex="-1">빈 시간, 어디 다녀올까요?</h2>
+          <div id="here-box" class="here-box">
+            <p id="here-line" class="here-line">📍 현재 위치를 확인하는 중…</p>
+            <button type="button" class="link" id="btn-change-origin">출발지 바꾸기</button>
+          </div>
+          <p id="today-count" class="hint"></p>
+          <button type="button" id="btn-start" class="btn btn-primary btn-big">지금 떠나기 →</button>
+          <p id="sample-note" class="sample-note" hidden>지도에 보이는 곳은 <strong>샘플(가짜) 데이터</strong>예요.</p>
+        </section>
+
+        <!-- 1 출발지 -->
+        <section data-view="origin" aria-labelledby="v-origin-h" hidden>
+          <p class="stepper"></p>
+          <h2 id="v-origin-h" tabindex="-1">어디서 출발하나요?</h2>
+          <div id="origin-picker"></div>
+          <div class="step-nav">
+            <button type="button" class="btn" data-prev>이전</button>
+            <button type="button" class="btn btn-primary" data-next="origin">다음</button>
+          </div>
+        </section>
+
+        <!-- 2 시간 -->
+        <section data-view="time" aria-labelledby="v-time-h" hidden>
+          <p class="stepper"></p>
+          <h2 id="v-time-h" tabindex="-1">몇 시까지 시간이 있나요?</h2>
+          <label for="deadline">이 시각까지 도착지에 닿을게요</label>
+          <div class="row">
+            <input id="deadline" type="time" aria-describedby="deadline-err deadline-hint">
+          </div>
+          <div class="quick" role="group" aria-label="빠르게 고르기">
+            <button type="button" class="chip" data-add="30">+30분</button>
+            <button type="button" class="chip" data-add="60">+1시간</button>
+            <button type="button" class="chip" data-add="120">+2시간</button>
+          </div>
+          <p id="deadline-hint" class="hint">지금은 <span id="now-label">--:--</span></p>
+          <p id="deadline-err" class="field-err" hidden></p>
+
+          <fieldset class="stay">
+            <legend>가서 얼마나 머물까요?</legend>
+            <div class="seg">
+              <label><input type="radio" name="stay" value="15"> 15분</label>
+              <label><input type="radio" name="stay" value="30" checked> 30분</label>
+              <label><input type="radio" name="stay" value="60"> 60분</label>
+            </div>
+          </fieldset>
+          <div class="step-nav">
+            <button type="button" class="btn" data-prev>이전</button>
+            <button type="button" class="btn btn-primary" data-next="time">다음</button>
+          </div>
+        </section>
+
+        <!-- 3 도착지 -->
+        <section data-view="dest" aria-labelledby="v-dest-h" hidden>
+          <p class="stepper"></p>
+          <h2 id="v-dest-h" tabindex="-1">들렀다가 어디로 가나요?</h2>
+          <fieldset>
+            <legend class="visually-hidden">도착지</legend>
+            <div class="seg seg-col">
+              <label><input type="radio" name="destMode" value="return" checked> 출발지로 돌아오기</label>
+              <label><input type="radio" name="destMode" value="other"> 다른 곳으로 가기</label>
+            </div>
+          </fieldset>
+          <div id="dest-picker" hidden></div>
+          <div class="step-nav">
+            <button type="button" class="btn" data-prev>이전</button>
+            <button type="button" class="btn btn-primary" data-next="dest">다음</button>
+          </div>
+        </section>
+
+        <!-- 4 종합 확인 -->
+        <section data-view="confirm" aria-labelledby="v-confirm-h" hidden>
+          <p class="stepper"></p>
+          <h2 id="v-confirm-h" tabindex="-1">이대로 찾아볼까요?</h2>
+          <dl class="summary">
+            <div><dt>출발</dt><dd id="sum-origin"></dd><dd><button type="button" class="link" data-go="origin" aria-label="출발지 바꾸기">바꾸기</button></dd></div>
+            <div><dt>시간</dt><dd id="sum-time"></dd><dd><button type="button" class="link" data-go="time" aria-label="시간 바꾸기">바꾸기</button></dd></div>
+            <div><dt>도착</dt><dd id="sum-dest"></dd><dd><button type="button" class="link" data-go="dest" aria-label="도착지 바꾸기">바꾸기</button></dd></div>
+          </dl>
+          <div class="step-nav">
+            <button type="button" class="btn" data-prev>이전</button>
+            <button type="button" id="btn-search" class="btn btn-primary">갈 수 있는 곳 찾기</button>
+          </div>
+        </section>
+
+        <!-- 결과 목록 -->
+        <section data-view="results" aria-labelledby="v-results-h" hidden>
+          <div class="view-top">
+            <button type="button" class="link" data-go="confirm">← 조건 바꾸기</button>
+            <button type="button" class="link" data-go="start">처음으로</button>
+          </div>
+          <h2 id="v-results-h" tabindex="-1">추천 <span id="results-count"></span></h2>
+          <p id="results-summary" class="hint"></p>
+
+          <div class="filters" role="group" aria-label="필터와 정렬">
+            <label class="check"><input type="checkbox" id="f-free"> 무료만</label>
+            <div class="seg seg-small" role="radiogroup" aria-label="종류">
+              <label><input type="radio" name="kind" value="all" checked> 전체</label>
+              <label><input type="radio" name="kind" value="event"> 행사</label>
+              <label><input type="radio" name="kind" value="place"> 장소</label>
+            </div>
+            <label class="sort"><span class="visually-hidden">정렬</span>
+              <select id="sort">
+                <option value="near">이동 짧은 순</option>
+                <option value="slack">여유 많은 순</option>
+              </select>
+            </label>
+          </div>
+          <p class="hint">시간은 직선거리로 어림한 <strong>대략값</strong>이에요.</p>
+          <ul id="result-list" class="result-list"></ul>
+          <p id="data-date" class="hint data-date"></p>
+        </section>
+
+        <!-- 상세 -->
+        <section data-view="detail" aria-labelledby="v-detail-h" hidden>
+          <div class="view-top">
+            <button type="button" id="btn-detail-back" class="link">← 목록으로</button>
+          </div>
+          <div id="detail-body"></div>
+        </section>
+      </div>
+    </aside>
+  </main>
+
+  <!-- ===== 나들이 기록 페이지 ===== -->
+  <main id="records-page" class="records-page" hidden>
+    <div class="page-wrap">
+      <h2 id="records-h" tabindex="-1">나들이 기록</h2>
+      <p class="hint">이 브라우저에만 저장돼요. 위치는 저장하지 않아요.</p>
+      <div id="rec-status" class="status" role="status" aria-live="polite"></div>
+      <p id="rec-summary" class="rec-summary"></p>
+      <ul id="record-list" class="record-list"></ul>
+      <button type="button" id="btn-clear-records" class="btn btn-ghost">기록 전체 삭제</button>
+
+      <h2 class="sub-h">즐겨찾기 역</h2>
+      <ul id="fav-manage" class="record-list"></ul>
+      <button type="button" id="btn-clear-favs" class="btn btn-ghost">즐겨찾기 전체 삭제</button>
+      <p id="foot-meta" class="hint foot"></p>
+    </div>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
