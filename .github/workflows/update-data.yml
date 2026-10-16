@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "0 20 * * *" # 매일 20:00 UTC = 다음 날 05:00 KST
   workflow_dispatch:
+    inputs:
+      debug_stations:
+        description: "원본 행을 출력할 역 이름(쉼표로 구분, 확인용)"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -25,6 +30,7 @@ jobs:
       - name: 서울 열린데이터광장에서 받기
         env:
           SEOUL_API_KEY: ${{ secrets.SEOUL_API_KEY }}
+          DEBUG_STATIONS: ${{ inputs.debug_stations }}
         run: node scripts/fetch-data.js
 
       - name: 데이터 커밋

@@ -266,6 +266,10 @@ function write(file, data) {
   const events = normEvents(eventRows, today);
   const libs = normLibraries(libRows);
   const stations = normStations(stationRows);
+  // 확인용: DEBUG_STATIONS='회기,용산' 처럼 주면 해당 역의 원본 행을 출력
+  for (const q of (process.env.DEBUG_STATIONS || '').split(',').map((x) => x.trim()).filter(Boolean)) {
+    for (const r of stationRows.filter((x) => clean(x.BLDN_NM).includes(q))) console.log(`  [역 원본] ${JSON.stringify(r)}`);
+  }
 
   // 하나라도 비면 기존 파일을 지키고 실패 처리
   if (!events.items.length || !libs.items.length || !stations.items.length) {
