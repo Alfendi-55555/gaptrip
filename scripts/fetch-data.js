@@ -195,6 +195,12 @@ const LINE_NAME = {
 };
 // 경원선 중 용산~청량리 구간은 경의중앙선이 다님
 const GYEONGWON_JUNGANG = new Set(['용산', '이촌', '서빙고', '한남', '옥수', '응봉', '왕십리', '청량리']);
+// API(역사마스터)에 행이 빠져 있어 노선이 누락되는 환승역 — 확인된 것만 보충
+const EXTRA_LINES = {
+  회기: ['1호선'], 창동: ['1호선'], 용산: ['경의중앙선'],
+  왕십리: ['수인분당선'], 청량리: ['수인분당선'],
+  상봉: ['경춘선'], 망우: ['경춘선'], 광운대: ['경춘선'],
+};
 const LINE_ORDER = ['1호선', '2호선', '3호선', '4호선', '5호선', '6호선', '7호선', '8호선', '9호선', '경의중앙선', '수인분당선', '신분당선', '공항철도', '경춘선', '서해선', '우이신설선', '신림선', '김포골드라인', 'GTX-A'];
 
 function lineName(raw, stationName) {
@@ -225,7 +231,10 @@ function normStations(rows) {
     const ia = LINE_ORDER.indexOf(a), ib = LINE_ORDER.indexOf(b);
     return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b, 'ko');
   });
-  for (const [name, s] of byName) s.lines = sortLines(linesOf.get(name) || []);
+  for (const [name, s] of byName) {
+    const extra = EXTRA_LINES[name.replace(/\(.*\)$/, '')] || [];
+    s.lines = sortLines(new Set([...(linesOf.get(name) || []), ...extra]));
+  }
   // API에 좌표가 없는 역은 수동 목록(data/stations-manual.json)으로 채움
   let filled = 0;
   try {
