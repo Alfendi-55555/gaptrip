@@ -184,21 +184,48 @@ function normLibraries(rows) {
 
 /* ---------- 지하철역 ---------- */
 
+// API의 노선 이름은 철도 법정 노선명(경원선·경부선 등)이라 타는 사람이 쓰는 이름으로 바꿈
+const LINE_NAME = {
+  경부선: '1호선', 경인선: '1호선', 경원선: '1호선', 장항선: '1호선',
+  중앙선: '경의중앙선', 경의선: '경의중앙선',
+  분당선: '수인분당선', 수인선: '수인분당선',
+  일산선: '3호선', 과천선: '4호선', 안산선: '4호선', 진접선: '4호선',
+  별내선: '8호선', '9호선(연장)': '9호선', '7호선(인천)': '7호선', '신분당선(연장2)': '신분당선', '신분당선(연장)': '신분당선',
+  공항철도1호선: '공항철도', '수도권 광역급행철도': 'GTX-A',
+};
+// 경원선 중 용산~청량리 구간은 경의중앙선이 다님
+const GYEONGWON_JUNGANG = new Set(['용산', '이촌', '서빙고', '한남', '옥수', '응봉', '왕십리', '청량리']);
+const LINE_ORDER = ['1호선', '2호선', '3호선', '4호선', '5호선', '6호선', '7호선', '8호선', '9호선', '경의중앙선', '수인분당선', '신분당선', '공항철도', '경춘선', '서해선', '우이신설선', '신림선', '김포골드라인', 'GTX-A'];
+
+function lineName(raw, stationName) {
+  const base = stationName.replace(/\(.*\)$/, '');
+  if (raw === '경원선' && GYEONGWON_JUNGANG.has(base)) return '경의중앙선';
+  return LINE_NAME[raw] || raw;
+}
+
 function normStations(rows) {
   const byName = new Map();
+  const linesOf = new Map(); // 좌표가 없는 행의 노선도 모아 둠(예: 회기역 1호선)
   let noCoords = 0;
   const missing = new Set();
   for (const r of rows) {
-    const c = coords(r.LAT, r.LOT);
-    if (!c) { noCoords++; missing.add(clean(r.BLDN_NM).replace(/역$/, '')); continue; }
     // '서울역'처럼 이름에 '역'이 붙은 경우 화면에서 '역'을 다시 붙이므로 떼어 둠
     const name = clean(r.BLDN_NM).replace(/역$/, '');
     if (!name) continue;
-    const s = byName.get(name) || { id: `stn_${clean(r.BLDN_ID)}`, name, lines: [], ...c };
-    const line = clean(r.ROUTE);
-    if (line && !s.lines.includes(line)) s.lines.push(line);
-    byName.set(name, s);
+    const line = clean(r.ROUTE) && lineName(clean(r.ROUTE), name);
+    if (line) {
+      if (!linesOf.has(name)) linesOf.set(name, new Set());
+      linesOf.get(name).add(line);
+    }
+    const c = coords(r.LAT, r.LOT);
+    if (!c) { noCoords++; missing.add(name); continue; }
+    if (!byName.has(name)) byName.set(name, { id: `stn_${clean(r.BLDN_ID)}`, name, lines: [], ...c });
   }
+  const sortLines = (ls) => [...ls].sort((a, b) => {
+    const ia = LINE_ORDER.indexOf(a), ib = LINE_ORDER.indexOf(b);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b, 'ko');
+  });
+  for (const [name, s] of byName) s.lines = sortLines(linesOf.get(name) || []);
   // API에 좌표가 없는 역은 수동 목록(data/stations-manual.json)으로 채움
   let filled = 0;
   try {
@@ -206,7 +233,8 @@ function normStations(rows) {
     for (const m of manual) {
       // API에 '고려대(종암)'처럼 괄호 붙은 이름으로 이미 있으면 보충하지 않음
       if (byName.has(m.name) || [...byName.keys()].some((n) => n.startsWith(`${m.name}(`))) continue;
-      byName.set(m.name, { ...m, approx: true });
+      const apiLines = linesOf.get(m.name);
+      byName.set(m.name, { ...m, lines: apiLines ? sortLines(apiLines) : m.lines, approx: true });
       filled++;
     }
   } catch (e) {
