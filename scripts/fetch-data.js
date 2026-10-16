@@ -204,7 +204,8 @@ function normStations(rows) {
   try {
     const manual = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'stations-manual.json'), 'utf8')).items;
     for (const m of manual) {
-      if (byName.has(m.name)) continue;
+      // API에 '고려대(종암)'처럼 괄호 붙은 이름으로 이미 있으면 보충하지 않음
+      if (byName.has(m.name) || [...byName.keys()].some((n) => n.startsWith(`${m.name}(`))) continue;
       byName.set(m.name, { ...m, approx: true });
       filled++;
     }
