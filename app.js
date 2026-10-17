@@ -42,7 +42,7 @@ const state = {
   draft: { origin: null, dest: null, destMode: 'return' },
   here: null,       // 현재 위치 { lat, lng, demo } — 저장하지 않음
   hereState: 'pending', // pending | ok | fail
-  flow: ['origin', 'time', 'dest', 'confirm'],
+  flow: ['origin', 'time', 'dest'],
   plan: null,       // { origin, dest, destMode, hasDeadline, deadlineMin, nowMin, routes }
   hereRoutes: null, // 현재 출발지 기준 길 계산 결과(홈 안내용)
   flowHasOrigin: false,
@@ -283,13 +283,13 @@ function clearErr(errId, inputId) {
 
 /* ---------- 패널 단계 이동 ---------- */
 
-const VIEWS = ['start', 'origin', 'time', 'dest', 'confirm', 'results', 'detail'];
-const STEP_NAMES = { origin: '출발지', time: '시간', dest: '도착지', confirm: '확인' };
+const VIEWS = ['start', 'origin', 'time', 'dest', 'results', 'detail'];
+const STEP_NAMES = { origin: '출발지', time: '시간', dest: '도착지' };
 
-// 현재 위치를 이미 알면 출발지 단계를, 돌아올 시각이 없으면 도착지 단계를 건너뜀
+// 현재 위치를 이미 알면 출발지 단계를, 돌아올 시각이 없으면 도착지 단계를 건너뜀. 마지막 단계에서 바로 찾기(확인 단계 없음)
 const hasDeadline = () => !state.noDeadline;
 function computeFlow() {
-  return [...(state.flowHasOrigin ? ['origin'] : []), 'time', ...(hasDeadline() ? ['dest'] : []), 'confirm'];
+  return [...(state.flowHasOrigin ? ['origin'] : []), 'time', ...(hasDeadline() ? ['dest'] : [])];
 }
 function startFlow() {
   state.flowHasOrigin = !state.draft.origin;
@@ -301,7 +301,7 @@ function updateStepper(view) {
   if (!stepper) return;
   if (state.editing) { stepper.textContent = '조건 바꾸기'; return; }
   const i = state.flow.indexOf(view);
-  stepper.textContent = i < 0 ? '출발지 바꾸기' : `${i + 1} / ${state.flow.length} · ${STEP_NAMES[view]}`;
+  stepper.textContent = i < 0 ? '출발지 바꾸기' : state.flow.length === 1 ? STEP_NAMES[view] : `${i + 1} / ${state.flow.length} · ${STEP_NAMES[view]}`;
 }
 function goPrev() {
   const i = state.flow.indexOf(state.view);
@@ -310,7 +310,7 @@ function goPrev() {
 
 function go(view, { focus = true } = {}) {
   state.view = view;
-  if (['start', 'results', 'confirm'].includes(view)) state.editing = false;
+  if (['start', 'results'].includes(view)) state.editing = false;
   document.body.classList.toggle('editing', state.editing);
   if (view !== 'detail') clearRoute();
   for (const v of VIEWS) document.querySelector(`[data-view="${v}"]`).hidden = v !== view;
@@ -323,7 +323,6 @@ function go(view, { focus = true } = {}) {
   updateStepper(view);
   if (view === 'time') syncTimeUI();
   if (view === 'dest') { syncDestMode(); renderPicker('dest'); }
-  if (view === 'confirm') renderSummary();
   setSheet(view === 'start' ? 'normal' : 'expanded');
   $('panel-body').scrollTop = 0;
   if (focus) document.querySelector(`[data-view="${view}"] h2`)?.focus({ preventScroll: true });
@@ -340,7 +339,7 @@ function onNext(step) {
     go('time');
   } else if (step === 'time') {
     if (!checkTime()) return;
-    go(hasDeadline() ? 'dest' : 'confirm');
+    if (hasDeadline()) go('dest'); else runSearch();
   } else if (step === 'dest') {
     clearErr('dest-pick-err');
     if (state.draft.destMode === 'other' && !state.draft.dest) {
@@ -348,7 +347,7 @@ function onNext(step) {
       $('dest-q').focus();
       return;
     }
-    go('confirm');
+    runSearch();
   }
 }
 
@@ -404,17 +403,6 @@ function destOf(draft) {
   return draft.destMode === 'return' ? draft.origin : draft.dest;
 }
 
-function renderSummary() {
-  const d = state.draft;
-  $('sum-origin').textContent = d.origin?.label || '—';
-  const dl = parseHM($('deadline').value);
-  const dep = departMin();
-  const depText = dep === null ? '—' : departIsNow() ? `지금(${fmtHM(dep)}) 출발` : `${fmtHM(dep)} 출발`;
-  $('sum-time').textContent = !hasDeadline() ? `${depText} · 돌아올 시각 없음`
-    : dl === null || dep === null ? depText : `${depText} → ${fmtHM(dl)}까지 (${fmtSpan(dl - dep)})`;
-  $('sum-dest-row').hidden = !hasDeadline();
-  $('sum-dest').textContent = d.destMode === 'return' ? `출발지로 돌아오기 (${d.origin?.label || '—'})` : (d.dest?.label || '—');
-}
 
 /* ---------- 출발지·도착지 고르기 ---------- */
 
@@ -762,6 +750,7 @@ function syncTimeUI() {
   }
   state.flow = computeFlow();
   updateStepper('time');
+  document.querySelector('[data-next="time"]').textContent = set ? '다음' : '갈 수 있는 곳 찾기';
   syncRange();
   renderSentence();
   scheduleCount();
@@ -897,7 +886,7 @@ async function runSearch() {
     setStatus('error', '근처 정보를 불러오지 못해서 찾을 수 없어요.', '인터넷 연결을 확인하고 새로고침해 주세요.');
     return;
   }
-  // 확인 화면에 머무는 사이 시각이 지났을 수 있으니 다시 검사
+  // 고르는 사이 시각이 지났을 수 있으니 다시 검사
   if (validateDepart() || validateDeadline()) { go('time'); checkTime(); return; }
   const d = state.draft;
   const withDeadline = hasDeadline();
@@ -907,10 +896,11 @@ async function runSearch() {
     origin: d.origin, dest: withDeadline ? destOf(d) : null, destMode: d.destMode, hasDeadline: withDeadline,
     deadlineMin: withDeadline ? parseHM($('deadline').value) : null, nowMin: departMin(), departNow: departIsNow(),
   };
-  $('btn-search').disabled = true;
+  const nextBtns = document.querySelectorAll('[data-next], [data-apply]');
+  nextBtns.forEach((b) => { b.disabled = true; });
   setStatus('loading', '걷는 길을 계산하는 중이에요');
   state.plan.routes = await cachedRoutes(state.plan.origin, state.plan.dest);
-  $('btn-search').disabled = false;
+  nextBtns.forEach((b) => { b.disabled = false; });
   state.computed = compute(state.plan);
   go('results', { focus: false });
   renderResults();
@@ -1636,7 +1626,6 @@ async function init() {
   document.querySelectorAll('[data-prev]').forEach((b) => b.addEventListener('click', goPrev));
   document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => go(b.dataset.go)));
   document.querySelectorAll('[data-next]').forEach((b) => b.addEventListener('click', () => onNext(b.dataset.next)));
-  $('btn-search').addEventListener('click', runSearch);
   $('btn-detail-back').addEventListener('click', closeDetail);
   $('deadline').addEventListener('input', () => { clearErr('deadline-err', 'deadline'); syncRange(); renderSentence(); scheduleCount(); });
   $('deadline-range').addEventListener('input', onRange);

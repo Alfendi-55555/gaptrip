@@ -19,7 +19,7 @@
   <meta property="og:locale" content="ko_KR">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-  <link rel="stylesheet" href="style.css?v=20261018e">
+  <link rel="stylesheet" href="style.css?v=20261018g">
 </head>
 <body>
   <a class="skip" href="#panel">‘지금 떠나기’로 건너뛰기</a>
@@ -149,26 +149,12 @@
           <div id="dest-picker" hidden></div>
           <div class="step-nav">
             <button type="button" class="btn" data-prev>이전</button>
-            <button type="button" class="btn btn-primary" data-next="dest">다음</button>
+            <button type="button" class="btn btn-primary" data-next="dest">갈 수 있는 곳 찾기</button>
             <button type="button" class="btn" data-cancel>취소</button>
             <button type="button" class="btn btn-primary" data-apply="dest">이 조건으로 다시 찾기</button>
           </div>
         </section>
 
-        <!-- 4 종합 확인 -->
-        <section data-view="confirm" aria-labelledby="v-confirm-h" hidden>
-          <p class="stepper"></p>
-          <h2 id="v-confirm-h" tabindex="-1">이대로 찾아볼까요?</h2>
-          <dl class="summary">
-            <div><dt>출발</dt><dd id="sum-origin"></dd><dd><button type="button" class="link" data-go="origin" aria-label="출발지 바꾸기">바꾸기</button></dd></div>
-            <div><dt>시간</dt><dd id="sum-time"></dd><dd><button type="button" class="link" data-go="time" aria-label="시간 바꾸기">바꾸기</button></dd></div>
-            <div id="sum-dest-row"><dt>도착</dt><dd id="sum-dest"></dd><dd><button type="button" class="link" data-go="dest" aria-label="도착지 바꾸기">바꾸기</button></dd></div>
-          </dl>
-          <div class="step-nav">
-            <button type="button" class="btn" data-prev>이전</button>
-            <button type="button" id="btn-search" class="btn btn-primary">갈 수 있는 곳 찾기</button>
-          </div>
-        </section>
 
         <!-- 결과 목록 -->
         <section data-view="results" aria-labelledby="v-results-h" hidden>
@@ -255,9 +241,9 @@
   </main>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-  <script src="config.js?v=20261018e"></script>
-  <script src="hours.js?v=20261018e"></script>
-  <script src="walk.js?v=20261018e"></script>
-  <script src="app.js?v=20261018e"></script>
+  <script src="config.js?v=20261018g"></script>
+  <script src="hours.js?v=20261018g"></script>
+  <script src="walk.js?v=20261018g"></script>
+  <script src="app.js?v=20261018g"></script>
 </body>
 </html>
