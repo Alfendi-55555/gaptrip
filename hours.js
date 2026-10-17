@@ -5,7 +5,7 @@
 //            "19:30"(시작 시각), "평일 19:30, 주말 15:00 (월,화 공연없음)", "11:00~19:00, 목요일 21:00까지 연장"
 //   휴관일:  "매주 월요일 및 법정공휴일", "2,4주 월요일", "매월 첫째/셋째 화요일"
 //   못 읽는 것: 특정 날짜("10.28 10:00 ~"), "둘째주 수요일 19:00", "프로그램별 상이" 등 → known: false
-//   법정 공휴일·임시 휴관은 날짜를 알 수 없어 반영하지 않음.
+//   법정 공휴일은 아래 HOLIDAYS 목록으로 반영(휴관일에 '공휴일'이 적힌 곳). 임시 휴관은 알 수 없어 반영하지 않음.
 (function (root) {
   'use strict';
 
@@ -114,6 +114,16 @@
     return { weekly: [...weekly], monthly };
   }
 
+  // 관공서 공휴일(대체공휴일 포함). 해마다 한국천문연구원 월력요항을 보고 추가.
+  // TODO: 2027년은 월력요항 확인 후 추가
+  const HOLIDAYS = new Set([
+    '2026-01-01', '2026-02-16', '2026-02-17', '2026-02-18', '2026-03-01', '2026-03-02',
+    '2026-05-05', '2026-05-24', '2026-05-25', '2026-06-03', '2026-06-06', '2026-08-15', '2026-08-17',
+    '2026-09-24', '2026-09-25', '2026-09-26', '2026-10-03', '2026-10-05', '2026-10-09', '2026-12-25',
+  ]);
+  const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const isHoliday = (date) => HOLIDAYS.has(ymd(date));
+
   /**
    * 오늘(date) 기준 운영 정보
    * → { known, closedToday, reason, windows: [{ start, end|null }] }  (end가 null이면 시작 시각만 아는 공연)
@@ -122,6 +132,11 @@
     const dow = date.getDay();
     const nthWeek = Math.ceil(date.getDate() / 7);
 
+    // 'OO 및 법정공휴일 휴관': 오늘이 공휴일이면 휴관 ('일요일 제외'라고 적힌 곳은 일요일 공휴일엔 엶)
+    if (place.closed && /공휴일/.test(place.closed) && isHoliday(date)
+        && !(dow === 0 && /일요일\s*제외|일요일을\s*제외/.test(place.closed))) {
+      return { known: true, closedToday: true, reason: '오늘은 공휴일이라 휴관이에요', windows: [] };
+    }
     if (place.closed) {
       const c = parseClosed(place.closed);
       if (c.weekly.includes(dow) || c.monthly.some((r) => r.dow === dow && r.nth.includes(nthWeek))) {
@@ -136,7 +151,7 @@
     return { known: true, closedToday: false, windows };
   }
 
-  const api = { parseHours, parseClosed, todaySchedule };
+  const api = { parseHours, parseClosed, todaySchedule, isHoliday };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.GapHours = api;
 })(typeof window !== 'undefined' ? window : globalThis);

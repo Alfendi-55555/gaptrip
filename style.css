@@ -355,3 +355,33 @@ input[aria-invalid="true"] { border-color: var(--err); box-shadow: 0 0 0 1px var
 /* 출발·돌아오기 */
 .depart, .return { margin-top: 14px; }
 #depart-box { margin-top: 10px; }
+
+/* 결과 카드 (숫자 두 개를 크게) */
+.results-summary { margin: 0; color: var(--muted); font-size: 0.9rem; }
+.result-notes { display: flex; flex-direction: column; gap: 4px; margin: 8px 0 4px; }
+.fold { font-size: 0.88rem; color: var(--muted); }
+.fold summary { cursor: pointer; font-weight: 600; color: var(--ink); min-height: 32px; display: flex; align-items: center; gap: 6px; }
+.fold summary::marker { color: var(--muted); }
+.fold p { margin: 4px 0 6px; line-height: 1.5; }
+.excluded-list { margin: 4px 0 8px; padding-left: 1.1em; }
+.excluded-list li { margin: 2px 0; }
+.result-row .head { display: flex; flex-direction: column; gap: 2px; }
+.result-row .title { margin: 0; }
+.result-row .meta { display: block; font-size: 0.84rem; color: var(--muted); }
+.result-row .meta.warn { color: var(--warn); }
+.result-row .nums { display: flex; flex-wrap: wrap; gap: 4px 18px; align-items: baseline; margin-top: 10px; }
+.result-row .num { font-size: 0.82rem; color: var(--muted); }
+.result-row .num b { font-size: 1.25rem; color: var(--ink); font-weight: 700; margin-left: 4px; font-variant-numeric: tabular-nums; }
+.result-row .num.stay b { color: var(--free); }
+.result-row .num.unknown b { color: var(--warn); }
+.result-row .approx { font-size: 0.75rem; font-weight: 600; color: var(--warn); background: var(--warn-soft); padding: 1px 6px; border-radius: 6px; }
+.result-row .chev { position: absolute; right: 14px; top: 16px; color: var(--muted); }
+.result-row { position: relative; padding-right: 36px; }
+
+/* 로고 */
+.brand { display: inline-flex; align-items: center; gap: 8px; }
+.brand img { display: block; border-radius: 7px; }
+.fold summary { list-style: none; }
+.fold summary::-webkit-details-marker { display: none; }
+.fold summary::before { content: "▸"; color: var(--muted); font-size: 0.8em; width: 1em; }
+.fold[open] summary::before { content: "▾"; }

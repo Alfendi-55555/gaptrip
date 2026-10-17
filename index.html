@@ -4,15 +4,28 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>틈새 나들이</title>
-  <meta name="description" content="빈 시간 안에 다녀올 수 있는 근처 행사와 장소를 찾아 줍니다.">
+  <meta name="description" content="빈 시간이 생겼을 때, 돌아올 시간까지 계산해서 지금 다녀올 수 있는 근처 행사와 장소만 보여 줘요.">
+  <meta name="theme-color" content="#b2410f">
+  <link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="icons/icon-192.png" type="image/png" sizes="192x192">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="틈새 나들이">
+  <meta property="og:description" content="돌아올 시간까지 계산해서, 지금 다녀올 수 있는 곳만 보여 줘요.">
+  <meta property="og:url" content="https://alfendi-55555.github.io/gaptrip/">
+  <meta property="og:image" content="https://alfendi-55555.github.io/gaptrip/icons/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:locale" content="ko_KR">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-  <link rel="stylesheet" href="style.css?v=20261016b">
+  <link rel="stylesheet" href="style.css?v=20261018b">
 </head>
 <body>
   <a class="skip" href="#panel">‘지금 떠나기’로 건너뛰기</a>
 
   <header class="top">
-    <h1><a href="#/">틈새 나들이</a></h1>
+    <h1><a href="#/" class="brand"><img src="icons/favicon.svg" alt="" width="28" height="28">틈새 나들이</a></h1>
     <nav class="tabs" aria-label="페이지">
       <a href="#/" data-route="home">홈</a>
       <a href="#/records" data-route="records">나들이 기록</a>
@@ -153,7 +166,7 @@
             <button type="button" class="link" data-go="start">처음으로</button>
           </div>
           <h2 id="v-results-h" tabindex="-1">추천 <span id="results-count"></span></h2>
-          <p id="results-summary" class="hint"></p>
+          <p id="results-summary" class="results-summary"></p>
 
           <div class="filters" role="group" aria-label="필터와 정렬">
             <label class="check"><input type="checkbox" id="f-free"> 무료만</label>
@@ -169,7 +182,17 @@
               </select>
             </label>
           </div>
-          <p class="hint">걷는 시간은 OpenStreetMap 길 데이터로 계산한 <strong>대략값</strong>이에요(지금은 한국외대 주변만, 그 밖은 직선거리 어림). 머물 수 있는 시간이 10분이 안 되는 곳과 그 시간에 문을 닫는 곳은 뺐어요.</p>
+          <div class="result-notes">
+            <details id="excluded" class="fold" hidden>
+              <summary id="excluded-summary"></summary>
+              <ul id="excluded-list" class="excluded-list"></ul>
+            </details>
+            <details class="fold">
+              <summary>계산 방법</summary>
+              <p>걷는 시간은 OpenStreetMap 길 데이터로 계산한 <strong>대략값</strong>이에요. 지금은 한국외대 주변만 길 데이터가 있고, 그 밖은 직선거리로 어림해요.</p>
+              <p>머물 수 있는 시간은 도착부터 ‘돌아오려면 나와야 하는 시각’과 ‘닫는 시각’ 중 이른 쪽까지예요. 10분이 안 되는 곳은 뺐어요.</p>
+            </details>
+          </div>
           <ul id="result-list" class="result-list"></ul>
           <p id="data-date" class="hint data-date"></p>
         </section>
@@ -203,9 +226,9 @@
   </main>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-  <script src="config.js?v=20261016b"></script>
-  <script src="hours.js?v=20261016b"></script>
-  <script src="walk.js?v=20261016b"></script>
-  <script src="app.js?v=20261016b"></script>
+  <script src="config.js?v=20261018b"></script>
+  <script src="hours.js?v=20261018b"></script>
+  <script src="walk.js?v=20261018b"></script>
+  <script src="app.js?v=20261018b"></script>
 </body>
 </html>

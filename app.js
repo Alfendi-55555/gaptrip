@@ -670,8 +670,15 @@ function checkTime() {
   return checkDeadline();
 }
 
+const DEFAULT_SPAN = 90; // 돌아올 시각을 비워 두면 출발부터 1시간 30분 뒤로 채움
+
 function syncDeadlineUI() {
   const set = hasDeadline();
+  if (set && !$('deadline').value) {
+    const base = departMin() ?? toMin(nowDate());
+    const target = Math.ceil((base + DEFAULT_SPAN) / 5) * 5;
+    if (target <= LAST_MIN) $('deadline').value = fmtHM(target);
+  }
   $('deadline-box').hidden = !set;
   $('nodeadline-hint').hidden = set;
   if (!set) clearErr('deadline-err', 'deadline');
@@ -790,12 +797,11 @@ function renderResults({ keepStatus } = {}) {
   const reachable = state.computed.filter((p) => p.reachable);
 
   $('results-count').textContent = `${shown.length}곳`;
-  const closedNow = state.computed.filter((p) => p.why === 'closed' || p.why === 'hours').length;
-  const dep = `${plan.origin.label}에서 ${plan.departNow ? '지금' : fmtHM(plan.nowMin)} 출발`;
-  $('results-summary').textContent = (plan.hasDeadline
+  const dep = `${plan.departNow ? '지금' : fmtHM(plan.nowMin)} 출발`;
+  $('results-summary').textContent = plan.hasDeadline
     ? `${dep} → ${fmtHM(plan.deadlineMin)}까지 ${plan.destMode === 'return' ? '출발지로 복귀' : plan.dest.label + ' 도착'}`
-    : `${dep} · 돌아올 시각 없음 · 걸어서 ${NEARBY_MIN}분 안`)
-    + (closedNow ? ` · 그 시간에 운영하지 않는 ${closedNow}곳은 뺐어요` : '');
+    : `${dep} · 돌아올 시각 없음 · 걸어서 ${NEARBY_MIN}분 안`;
+  renderExcluded();
   renderDataDate();
 
   if (!shown.length) {
@@ -816,6 +822,22 @@ function renderResults({ keepStatus } = {}) {
   renderMapPlaces(shown, { fit: true });
 }
 
+// 운영하지 않아 뺀 곳: 접힌 목록으로
+function renderExcluded() {
+  const out = state.computed.filter((p) => p.why === 'closed' || p.why === 'hours');
+  const box = $('excluded');
+  box.hidden = !out.length;
+  if (!out.length) return;
+  box.open = false;
+  $('excluded-summary').textContent = `운영하지 않아 뺀 곳 ${out.length}곳`;
+  const list = $('excluded-list');
+  list.replaceChildren();
+  for (const p of out.sort((a, b) => a.go - b.go)) {
+    const why = p.why === 'closed' ? p.sched.reason : '그 시간엔 운영하지 않아요';
+    list.append(el('li', { textContent: `${p.title} — ${why}` }));
+  }
+}
+
 function badges(p) {
   return el('span', { className: 'badges' },
     el('span', { className: `badge ${p.kind}`, textContent: p.kind === 'event' ? '행사' : '상시 장소' }),
@@ -823,16 +845,27 @@ function badges(p) {
     el('span', { className: 'badge cat', textContent: p.category }));
 }
 
+// 결과 카드: 이름 → 큰 숫자 두 개(걷는 시간·머물 수 있는 시간) → 한 줄 설명. 운영시간 원문·특이사항은 상세로.
+function stayNumber(c) {
+  if (c.startOnly) return `${fmtHM(c.from)} 시작`;
+  if (c.stay == null) return '자유';
+  return fmtDur(c.stay).replace('약 ', '');
+}
 function resultItem(p) {
-  const note = p.notes?.[0];
+  const t = stayText(p);
+  const kindText = p.kind === 'event' ? '행사' : '상시 장소';
   const btn = el('button', { type: 'button', className: 'result-row' },
-    badges(p),
-    el('span', { className: 'title', textContent: p.title }),
-    el('span', { className: 'line' }, '🕘 ', el('b', { textContent: p.hours || '운영시간은 방문 전 확인하세요' })),
-    note ? el('span', { className: 'line', textContent: `특이사항 · ${note}` }) : null,
-    el('span', { className: 'line', textContent: `걸어서 ${fmtDur(p.go)}${p.routed ? '' : ' (직선 어림)'} · 도착 약 ${fmtHM(p.arrive)}` }),
-    stayLine(p),
-    el('span', { className: 'more', textContent: '자세히 보기 →' }));
+    el('span', { className: 'head' },
+      el('span', { className: 'title', textContent: p.title }),
+      el('span', { className: 'meta', textContent: [kindText, p.isFree ? '무료' : '유료', p.category].join(' · ') })),
+    el('span', { className: 'nums' },
+      el('span', { className: 'num' }, '걸어서', el('b', { textContent: fmtDur(p.go).replace('약 ', '') })),
+      el('span', { className: `num stay${t.unknown ? ' unknown' : ''}` }, p.startOnly ? '공연' : '머물 수 있는 시간', el('b', { textContent: stayNumber(p) })),
+      p.routed ? null : el('span', { className: 'approx', textContent: '직선 어림' })),
+    t.sub ? el('span', { className: `meta${t.unknown ? ' warn' : ''}`, textContent: t.sub }) : null);
+  btn.append(el('span', { className: 'chev', textContent: '›' }));
+  btn.setAttribute('aria-label', `${p.title}, ${kindText}, 걸어서 ${fmtDur(p.go)}, ${t.main}${t.sub ? `, ${t.sub}` : ''}. 자세히 보기`);
+  btn.querySelector('.chev').setAttribute('aria-hidden', 'true');
   btn.dataset.id = p.id;
   btn.addEventListener('click', () => openDetail(p.id));
   return el('li', {}, btn);
@@ -922,7 +955,7 @@ function openDetail(id) {
     if (c.go > TRANSIT_TIP_MIN || c.back > TRANSIT_TIP_MIN) {
       wrap.append(el('p', { className: 'transit-tip', textContent: '🚇 걸어서 20분이 넘어요. 대중교통이 더 빠를 수 있어요.' }));
     }
-    if (/공휴일/.test(closedText(p))) wrap.append(el('p', { className: 'hint', textContent: '법정 공휴일·임시 휴관은 반영하지 않았어요.' }));
+    if (/공휴일/.test(closedText(p))) wrap.append(el('p', { className: 'hint', textContent: '법정 공휴일 휴관은 반영했지만, 임시 휴관은 반영하지 못해요.' }));
   } else {
     wrap.append(el('p', { className: 'hint', textContent: '‘지금 떠나기’에서 조건을 고르면 이동 시간과 여유 시간을 계산해 드려요.' }));
   }
