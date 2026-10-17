@@ -42,7 +42,8 @@ const state = {
   draft: { origin: null, dest: null, destMode: 'return' },
   here: null,       // 현재 위치 { lat, lng, demo } — 저장하지 않음
   hereState: 'pending', // pending | ok | fail
-  flow: ['origin', 'time', 'dest'],
+  flow: ['origin', 'time'],
+  openEditor: 'deadline', // 시간 단계에서 펼쳐 둘 설정: depart | deadline | dest
   plan: null,       // { origin, dest, destMode, hasDeadline, deadlineMin, nowMin, routes }
   hereRoutes: null, // 현재 출발지 기준 길 계산 결과(홈 안내용)
   flowHasOrigin: false,
@@ -283,15 +284,16 @@ function clearErr(errId, inputId) {
 
 /* ---------- 패널 단계 이동 ---------- */
 
-const VIEWS = ['start', 'origin', 'time', 'dest', 'results', 'detail'];
-const STEP_NAMES = { origin: '출발지', time: '시간', dest: '도착지' };
+const VIEWS = ['start', 'origin', 'time', 'results', 'detail'];
+const STEP_NAMES = { origin: '출발지', time: '시간·도착지' };
 
-// 현재 위치를 이미 알면 출발지 단계를, 돌아올 시각이 없으면 도착지 단계를 건너뜀. 마지막 단계에서 바로 찾기(확인 단계 없음)
+// 현재 위치를 이미 알면 출발지 단계를 건너뜀. 시간·도착지는 한 화면(문장)에서 고르고 바로 찾기
 const hasDeadline = () => !state.noDeadline;
 function computeFlow() {
-  return [...(state.flowHasOrigin ? ['origin'] : []), 'time', ...(hasDeadline() ? ['dest'] : [])];
+  return [...(state.flowHasOrigin ? ['origin'] : []), 'time'];
 }
 function startFlow() {
+  state.openEditor = 'deadline';
   state.flowHasOrigin = !state.draft.origin;
   state.flow = computeFlow();
   go(state.flow[0]);
@@ -321,8 +323,7 @@ function go(view, { focus = true } = {}) {
   }
   if (view === 'origin') renderPicker('origin');
   updateStepper(view);
-  if (view === 'time') syncTimeUI();
-  if (view === 'dest') { syncDestMode(); renderPicker('dest'); }
+  if (view === 'time') { syncDestMode(); renderPicker('dest'); syncTimeUI(); openEditor(state.openEditor); }
   setSheet(view === 'start' ? 'normal' : 'expanded');
   $('panel-body').scrollTop = 0;
   if (focus) document.querySelector(`[data-view="${view}"] h2`)?.focus({ preventScroll: true });
@@ -338,15 +339,7 @@ function onNext(step) {
     }
     go('time');
   } else if (step === 'time') {
-    if (!checkTime()) return;
-    if (hasDeadline()) go('dest'); else runSearch();
-  } else if (step === 'dest') {
-    clearErr('dest-pick-err');
-    if (state.draft.destMode === 'other' && !state.draft.dest) {
-      showErr('dest-pick-err', '도착지를 골라 주세요. 즐겨찾기나 역 검색으로 고를 수 있어요.');
-      $('dest-q').focus();
-      return;
-    }
+    if (!checkTime() || !checkDest()) return;
     runSearch();
   }
 }
@@ -368,7 +361,9 @@ function restoreDraft(snap) {
 function startEdit(step) {
   state.editSnap = snapshotDraft();
   state.editing = true;
-  go(step);
+  if (step === 'origin') { go('origin'); return; }
+  state.openEditor = step === 'dest' ? 'dest' : 'deadline';
+  go('time');
 }
 function cancelEdit() {
   if (state.editSnap) restoreDraft(state.editSnap);
@@ -386,17 +381,29 @@ function applyEdit(step) {
       return;
     }
   }
-  if (step === 'time' && !checkTime()) return;
-  if (step === 'dest') {
-    clearErr('dest-pick-err');
-    if (state.draft.destMode === 'other' && !state.draft.dest) {
-      showErr('dest-pick-err', '도착지를 골라 주세요. 즐겨찾기나 역 검색으로 고를 수 있어요.');
-      $('dest-q').focus();
-      return;
-    }
-  }
+  if (step === 'time' && (!checkTime() || !checkDest())) return;
   state.editing = false;
   runSearch();
+}
+
+// 돌아올 곳을 '다른 곳'으로 했는데 고르지 않았으면 안내하고 그 설정을 펼침
+function checkDest() {
+  clearErr('dest-pick-err');
+  if (!hasDeadline() || state.draft.destMode !== 'other' || state.draft.dest) return true;
+  openEditor('dest');
+  showErr('dest-pick-err', '도착지를 골라 주세요. 즐겨찾기나 역 검색으로 고를 수 있어요.');
+  $('dest-q').focus();
+  return false;
+}
+
+// 문장의 버튼 하나만 강조하고, 그 설정만 아래에 펼침
+const EDITORS = ['depart', 'deadline', 'dest'];
+function openEditor(name) {
+  if (name === 'dest' && !hasDeadline()) name = 'deadline';
+  state.openEditor = name;
+  for (const e of EDITORS) $(`${e}-editor`).hidden = e !== name;
+  document.querySelectorAll('#time-sentence .tok').forEach((t) => t.setAttribute('aria-expanded', String(t.dataset.editor === name)));
+  if (name === 'dest') renderPicker('dest');
 }
 
 function destOf(draft) {
@@ -492,6 +499,7 @@ function select(target, value) {
   renderPicker(target);
   renderMapMe();
   if (target === 'origin') renderHere();
+  if (target === 'dest' && state.view === 'time') { renderSentence(); scheduleCount(); }
   if (target === 'origin' && value.type === 'station') panTo(value, 14);
 }
 
@@ -674,6 +682,7 @@ function syncDestMode() {
   $('dest-picker').hidden = mode !== 'other';
   clearErr('dest-pick-err');
   renderMapMe();
+  if (state.view === 'time') { renderSentence(); scheduleCount(); }
 }
 
 /* ---------- 언제까지: 입력·검증 ---------- */
@@ -722,8 +731,7 @@ function checkTime() {
   clearErr('depart-err', 'depart');
   const dErr = validateDepart();
   if (dErr) {
-    $('depart-editor').hidden = false;
-    $('tok-depart').setAttribute('aria-expanded', 'true');
+    openEditor('depart');
     showErr('depart-err', dErr, 'depart');
     $('depart').focus();
     return false;
@@ -747,10 +755,10 @@ function syncTimeUI() {
   if (!set) {
     toggleCustom(false);
     clearErr('deadline-err', 'deadline');
+    if (state.openEditor === 'dest') openEditor('deadline');
   }
   state.flow = computeFlow();
   updateStepper('time');
-  document.querySelector('[data-next="time"]').textContent = set ? '다음' : '갈 수 있는 곳 찾기';
   syncRange();
   renderSentence();
   scheduleCount();
@@ -776,7 +784,6 @@ function renderSentence() {
 function toggleCustom(open) {
   $('deadline-box').hidden = !open;
   $('btn-custom').setAttribute('aria-expanded', String(open));
-  $('tok-deadline').setAttribute('aria-expanded', String(open));
 }
 
 // 조건을 바꿀 때마다 몇 곳인지 미리 세기 (찾기 버튼을 누르기 전)
@@ -853,6 +860,7 @@ function checkDeadline() {
   clearErr('deadline-err', 'deadline');
   const err = validateDeadline();
   if (!err) return true;
+  openEditor('deadline');
   toggleCustom(true);
   showErr('deadline-err', err, 'deadline');
   $('deadline').focus();
@@ -891,7 +899,7 @@ async function runSearch() {
   const d = state.draft;
   const withDeadline = hasDeadline();
   if (!d.origin) { go('origin'); onNext('origin'); return; }
-  if (withDeadline && d.destMode === 'other' && !d.dest) { go('dest'); onNext('dest'); return; }
+  if (withDeadline && d.destMode === 'other' && !d.dest) { go('time'); checkDest(); return; }
   state.plan = {
     origin: d.origin, dest: withDeadline ? destOf(d) : null, destMode: d.destMode, hasDeadline: withDeadline,
     deadlineMin: withDeadline ? parseHM($('deadline').value) : null, nowMin: departMin(), departNow: departIsNow(),
@@ -1635,13 +1643,7 @@ async function init() {
   document.querySelectorAll('.span-chip[data-add]').forEach((b) => b.addEventListener('click', onQuickAdd));
   $('chip-none').addEventListener('click', onNoDeadline);
   $('btn-custom').addEventListener('click', () => toggleCustom($('deadline-box').hidden));
-  $('tok-deadline').addEventListener('click', () => toggleCustom($('deadline-box').hidden));
-  $('tok-depart').addEventListener('click', () => {
-    const open = $('depart-editor').hidden;
-    $('depart-editor').hidden = !open;
-    $('tok-depart').setAttribute('aria-expanded', String(open));
-  });
-  $('tok-dest').addEventListener('click', () => { if (checkTime()) go('dest'); });
+  document.querySelectorAll('#time-sentence .tok').forEach((t) => t.addEventListener('click', () => openEditor(t.dataset.editor)));
   document.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => startEdit(b.dataset.edit)));
   document.querySelectorAll('[data-apply]').forEach((b) => b.addEventListener('click', () => applyEdit(b.dataset.apply)));
   document.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', cancelEdit));

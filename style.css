@@ -396,8 +396,8 @@ input[aria-invalid="true"] { border-color: var(--err); box-shadow: 0 0 0 1px var
   background: #fff; border: 1px solid #a9a296; border-radius: 10px; padding: 0 10px; min-height: 40px;
 }
 .tok:hover { border-color: var(--ink); }
-.tok-main { background: var(--accent); border-color: var(--accent); color: #fff; }
-.tok-main:hover { background: #963509; }
+.tok[aria-expanded="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.tok[aria-expanded="true"]:hover { background: #963509; }
 .editor { margin: 0 0 12px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
 .quick-span { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .span-chip {
@@ -488,3 +488,7 @@ input[aria-invalid="true"] { border-color: var(--err); box-shadow: 0 0 0 1px var
   border: 0; background: var(--bg); color: var(--muted);
 }
 .star-btn.on { background: #fbe9df; color: var(--accent); }
+
+.editor-title { margin: 0 0 8px; font-weight: 700; }
+.editor legend { font-weight: 700; margin-bottom: 8px; }
+#dest-picker { margin-top: 12px; }
