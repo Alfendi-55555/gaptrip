@@ -88,6 +88,7 @@
     dijkstra(src) {
       const n = this.n;
       const dist = new Float64Array(n).fill(Infinity);
+      const prev = new Int32Array(n).fill(-1); // 경로 선을 그리려고 직전 교차로를 기억
       // 지연 삭제 방식이라 힙에는 간선 수만큼 들어갈 수 있음
       const cap = this.to.length + n + 16;
       const heapN = new Int32Array(cap);
@@ -127,19 +128,29 @@
           const v = this.to[e], nd = d0 + this.w[e];
           if (nd < dist[v]) {
             dist[v] = nd;
+            prev[v] = u;
             push(v, nd);
           }
         }
       }
-      return dist;
+      return { dist, prev };
     }
 
-    // 출발점 p에서의 거리표: .minutesTo(place) → 분 또는 null
+    // 출발점 p에서의 거리표: .minutesTo(place) → 분 또는 null, .pathTo(place) → [[위도, 경도], …] 또는 null
     from(p) {
       const s = this.nearest(p);
       if (!s) return null;
-      const dist = this.dijkstra(s.i);
+      const { dist, prev } = this.dijkstra(s.i);
       return {
+        // 교차로만 남긴 그래프라 굽은 길은 모서리가 조금 깎여 보임
+        pathTo: (q) => {
+          const t = this.nearest(q);
+          if (!t || !Number.isFinite(dist[t.i])) return null;
+          const pts = [];
+          for (let v = t.i; v !== -1; v = prev[v]) pts.push([this.lat[v], this.lng[v]]);
+          pts.reverse();
+          return [[p.lat, p.lng], ...pts, [q.lat, q.lng]];
+        },
         minutesTo: (q) => {
           const t = this.nearest(q);
           if (!t || !Number.isFinite(dist[t.i])) return null;

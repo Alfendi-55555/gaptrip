@@ -46,6 +46,11 @@ const state = {
   plan: null,       // { origin, dest, destMode, hasDeadline, deadlineMin, nowMin, routes }
   hereRoutes: null, // 현재 출발지 기준 길 계산 결과(홈 안내용)
   flowHasOrigin: false,
+  noDeadline: false,   // '제한 없음'
+  editing: false,      // 결과 화면 조건 칩에서 들어온 '조건 바꾸기' 중
+  editSnap: null,
+  recMonth: null,      // 기록 페이지에서 보는 달 'YYYY-MM'
+  routeMemo: null,
   computed: null,   // 계산 결과(필터 전)
   view: 'start',
   detailFrom: 'start',
@@ -174,11 +179,22 @@ async function prepareRoutes(origin, dest) {
       area: g.name,
       go: (p) => fromO.minutesTo(p),
       back: (p) => (fromD ? fromD.minutesTo(p) : null),
+      goPath: (p) => fromO.pathTo(p),
+      backPath: (p) => { const r = fromD ? fromD.pathTo(p) : null; return r ? r.slice().reverse() : null; },
     };
   } catch (e) {
     console.warn('길 계산 실패, 직선거리로 대신해요', e);
     return null;
   }
+}
+
+// 같은 출발지·도착지면 계산해 둔 것을 다시 씀 (시간을 바꿀 때마다 '이 조건이면 N곳'을 세므로)
+async function cachedRoutes(origin, dest) {
+  const key = `${originKey(origin)}|${dest ? originKey(dest) : ''}`;
+  if (state.routeMemo?.key === key) return state.routeMemo.routes;
+  const routes = await prepareRoutes(origin, dest);
+  state.routeMemo = { key, routes };
+  return routes;
 }
 
 // 머물 수 있는 시간 문구: { main, sub, unknown }
@@ -271,7 +287,7 @@ const VIEWS = ['start', 'origin', 'time', 'dest', 'confirm', 'results', 'detail'
 const STEP_NAMES = { origin: '출발지', time: '시간', dest: '도착지', confirm: '확인' };
 
 // 현재 위치를 이미 알면 출발지 단계를, 돌아올 시각이 없으면 도착지 단계를 건너뜀
-const hasDeadline = () => document.querySelector('input[name="deadlineMode"]:checked').value === 'set';
+const hasDeadline = () => !state.noDeadline;
 function computeFlow() {
   return [...(state.flowHasOrigin ? ['origin'] : []), 'time', ...(hasDeadline() ? ['dest'] : []), 'confirm'];
 }
@@ -283,6 +299,7 @@ function startFlow() {
 function updateStepper(view) {
   const stepper = document.querySelector(`[data-view="${view}"] .stepper`);
   if (!stepper) return;
+  if (state.editing) { stepper.textContent = '조건 바꾸기'; return; }
   const i = state.flow.indexOf(view);
   stepper.textContent = i < 0 ? '출발지 바꾸기' : `${i + 1} / ${state.flow.length} · ${STEP_NAMES[view]}`;
 }
@@ -293,6 +310,9 @@ function goPrev() {
 
 function go(view, { focus = true } = {}) {
   state.view = view;
+  if (['start', 'results', 'confirm'].includes(view)) state.editing = false;
+  document.body.classList.toggle('editing', state.editing);
+  if (view !== 'detail') clearRoute();
   for (const v of VIEWS) document.querySelector(`[data-view="${v}"]`).hidden = v !== view;
   if (view === 'start') {
     if (state.hereState !== 'fail') clearStatus();
@@ -301,7 +321,7 @@ function go(view, { focus = true } = {}) {
   }
   if (view === 'origin') renderPicker('origin');
   updateStepper(view);
-  if (view === 'time') syncDeadlineUI();
+  if (view === 'time') syncTimeUI();
   if (view === 'dest') { syncDestMode(); renderPicker('dest'); }
   if (view === 'confirm') renderSummary();
   setSheet(view === 'start' ? 'normal' : 'expanded');
@@ -330,6 +350,54 @@ function onNext(step) {
     }
     go('confirm');
   }
+}
+
+// 결과 화면 조건 칩 → 그 단계만 고치고 바로 다시 찾기
+function snapshotDraft() {
+  return { draft: { ...state.draft }, departMode: departIsNow() ? 'now' : 'set', depart: $('depart').value, deadline: $('deadline').value, noDeadline: state.noDeadline };
+}
+function restoreDraft(snap) {
+  state.draft = { ...snap.draft };
+  document.querySelector(`input[name="departMode"][value="${snap.departMode}"]`).checked = true;
+  document.querySelector(`input[name="destMode"][value="${snap.draft.destMode}"]`).checked = true;
+  $('depart').value = snap.depart;
+  $('depart-box').hidden = snap.departMode === 'now';
+  $('deadline').value = snap.deadline;
+  state.noDeadline = snap.noDeadline;
+  renderMapMe();
+}
+function startEdit(step) {
+  state.editSnap = snapshotDraft();
+  state.editing = true;
+  go(step);
+}
+function cancelEdit() {
+  if (state.editSnap) restoreDraft(state.editSnap);
+  state.editing = false;
+  go('results', { focus: false });
+  renderResults({ keepStatus: true });
+  $('v-results-h').focus();
+}
+function applyEdit(step) {
+  if (step === 'origin') {
+    clearErr('origin-pick-err');
+    if (!state.draft.origin) {
+      showErr('origin-pick-err', '출발지를 골라 주세요. 현재 위치, 즐겨찾기, 역 검색 중 하나로 고를 수 있어요.');
+      $('origin-q').focus();
+      return;
+    }
+  }
+  if (step === 'time' && !checkTime()) return;
+  if (step === 'dest') {
+    clearErr('dest-pick-err');
+    if (state.draft.destMode === 'other' && !state.draft.dest) {
+      showErr('dest-pick-err', '도착지를 골라 주세요. 즐겨찾기나 역 검색으로 고를 수 있어요.');
+      $('dest-q').focus();
+      return;
+    }
+  }
+  state.editing = false;
+  runSearch();
 }
 
 function destOf(draft) {
@@ -538,7 +606,7 @@ function locateMe({ fromPicker = false } = {}) {
     if ($('status').classList.contains('loading')) clearStatus();
     renderHere();
     renderMapMe();
-    if (!fromPicker) panTo(state.here, 15);
+    if (!fromPicker && state.view === 'start') panTo(state.here, 15);
   };
   if (useDemoHere()) { ok(DEMO_HERE.lat, DEMO_HERE.lng, true); return; }
   if (!('geolocation' in navigator)) { geoFailed('이 브라우저에서는 위치를 확인할 수 없어요.'); return; }
@@ -556,7 +624,8 @@ function geoFailed(msg) {
   if (state.draft.origin?.type === 'geo') { state.draft.origin = null; renderPicker('origin'); }
   renderHere();
   renderMapMe();
-  setStatus('error', msg, '즐겨찾기나 역 검색으로 출발지를 골라 주세요.');
+  // 공유받은 장소 상세를 보는 중이면 위치 오류로 가리지 않음 (홈 안내에는 그대로 표시)
+  if (state.view !== 'detail') setStatus('error', msg, '즐겨찾기나 역 검색으로 출발지를 골라 주세요.');
   if (state.view === 'origin') $('origin-q').focus();
 }
 
@@ -643,6 +712,8 @@ function syncDepartUI() {
     $('depart').value = fmtHM(Math.min(LAST_MIN, Math.ceil((toMin(nowDate()) + 1) / 10) * 10));
   }
   syncRange();
+  renderSentence();
+  scheduleCount();
 }
 
 function validateDepart() {
@@ -663,6 +734,8 @@ function checkTime() {
   clearErr('depart-err', 'depart');
   const dErr = validateDepart();
   if (dErr) {
+    $('depart-editor').hidden = false;
+    $('tok-depart').setAttribute('aria-expanded', 'true');
     showErr('depart-err', dErr, 'depart');
     $('depart').focus();
     return false;
@@ -672,19 +745,77 @@ function checkTime() {
 
 const DEFAULT_SPAN = 90; // 돌아올 시각을 비워 두면 출발부터 1시간 30분 뒤로 채움
 
-function syncDeadlineUI() {
+function syncTimeUI() {
   const set = hasDeadline();
   if (set && !$('deadline').value) {
     const base = departMin() ?? toMin(nowDate());
     const target = Math.ceil((base + DEFAULT_SPAN) / 5) * 5;
     if (target <= LAST_MIN) $('deadline').value = fmtHM(target);
   }
-  $('deadline-box').hidden = !set;
+  $('sent-deadline').hidden = !set;
+  $('sent-none').hidden = set;
   $('nodeadline-hint').hidden = set;
-  if (!set) clearErr('deadline-err', 'deadline');
+  $('btn-custom').hidden = !set;
+  if (!set) {
+    toggleCustom(false);
+    clearErr('deadline-err', 'deadline');
+  }
   state.flow = computeFlow();
   updateStepper('time');
   syncRange();
+  renderSentence();
+  scheduleCount();
+}
+
+// "지금 14:00에 출발해서 15:30까지 출발지로 돌아올게요"
+function renderSentence() {
+  const dep = departMin();
+  $('tok-depart').textContent = departIsNow() ? `지금 ${fmtHM(toMin(nowDate()))}` : (dep === null ? '--:--' : fmtHM(dep));
+  const dl = parseHM($('deadline').value);
+  $('tok-deadline').textContent = dl === null ? '--:--' : fmtHM(dl);
+  const d = state.draft;
+  const other = d.destMode === 'other' && d.dest;
+  $('tok-dest').textContent = other ? d.dest.label : '출발지로';
+  $('sent-tail').textContent = other ? '에 도착할게요' : ' 돌아올게요';
+  const set = hasDeadline();
+  document.querySelectorAll('.span-chip[data-add]').forEach((b) => {
+    b.setAttribute('aria-pressed', String(set && dl !== null && dep !== null && dl - dep === +b.dataset.add));
+  });
+  $('chip-none').setAttribute('aria-pressed', String(!set));
+}
+
+function toggleCustom(open) {
+  $('deadline-box').hidden = !open;
+  $('btn-custom').setAttribute('aria-expanded', String(open));
+  $('tok-deadline').setAttribute('aria-expanded', String(open));
+}
+
+// 조건을 바꿀 때마다 몇 곳인지 미리 세기 (찾기 버튼을 누르기 전)
+let countTimer = null, countSeq = 0;
+function scheduleCount() {
+  clearTimeout(countTimer);
+  countTimer = setTimeout(updateCount, 150);
+}
+async function updateCount() {
+  const out = $('time-count');
+  const d = state.draft;
+  if (state.view !== 'time' || !state.dataOk || !d.origin || validateDepart() || validateDeadline()) { out.replaceChildren(); return; }
+  const seq = ++countSeq;
+  const withDeadline = hasDeadline();
+  const dest = withDeadline ? (destOf(d) || d.origin) : null;
+  const plan = {
+    origin: d.origin, dest, destMode: d.destMode, hasDeadline: withDeadline,
+    deadlineMin: withDeadline ? parseHM($('deadline').value) : null, nowMin: departMin(),
+  };
+  plan.routes = await cachedRoutes(d.origin, dest);
+  if (seq !== countSeq) return; // 그사이 조건이 또 바뀜
+  const n = compute(plan).filter((p) => p.reachable).length;
+  if (!n) {
+    out.replaceChildren(withDeadline ? '이 조건으로는 다녀올 곳이 없어요. 시간을 늘려 보세요.' : '지금 열려 있는 곳이 근처에 없어요.');
+    return;
+  }
+  out.replaceChildren(withDeadline ? '이 조건이면 ' : `${departIsNow() ? '지금' : '그때'} 갈 수 있는 곳 `,
+    el('strong', { textContent: `${n}곳` }), withDeadline ? '에 다녀올 수 있어요' : '');
 }
 
 // 시각 입력칸 ↔ 막대 ↔ '지금부터 ○ 뒤' 맞추기
@@ -711,6 +842,8 @@ function onRange() {
   $('deadline').value = fmtHM(target);
   clearErr('deadline-err', 'deadline');
   syncRange();
+  renderSentence();
+  scheduleCount();
 }
 
 function validateDeadline() {
@@ -718,7 +851,7 @@ function validateDeadline() {
   const now = departMin();
   if (now === null) return null; // 출발 시각 오류가 먼저 안내됨
   const v = parseHM($('deadline').value);
-  if (v === null) return '몇 시까지 시간이 있는지 알려 주세요. 정해진 시각이 없으면 ‘딱히 없어요’를 고르세요.';
+  if (v === null) return '몇 시까지 시간이 있는지 알려 주세요. 정해진 시각이 없으면 ‘제한 없음’을 고르세요.';
   if (v <= now) {
     // 밤늦게 이른 새벽 시각을 고르면 '내일'을 뜻한 것으로 봄
     if (now >= 18 * 60 && v < 6 * 60) return '오늘 안의 시각으로 골라 주세요. (자정 전까지만 찾을 수 있어요)';
@@ -731,23 +864,30 @@ function checkDeadline() {
   clearErr('deadline-err', 'deadline');
   const err = validateDeadline();
   if (!err) return true;
+  toggleCustom(true);
   showErr('deadline-err', err, 'deadline');
   $('deadline').focus();
   return false;
 }
 
 function onQuickAdd(e) {
+  state.noDeadline = false;
   const target = (departMin() ?? toMin(nowDate())) + +e.currentTarget.dataset.add;
   clearErr('deadline-err', 'deadline');
   if (target >= 24 * 60) {
     $('deadline').value = '';
-    syncRange();
+    syncTimeUI();
+    toggleCustom(true);
     showErr('deadline-err', '오늘 안의 시각으로 골라 주세요. (자정 전까지만 찾을 수 있어요)', 'deadline');
     $('deadline').focus();
     return;
   }
   $('deadline').value = fmtHM(target);
-  syncRange();
+  syncTimeUI();
+}
+function onNoDeadline() {
+  state.noDeadline = true;
+  syncTimeUI();
 }
 
 /* ---------- 찾기 ---------- */
@@ -769,7 +909,7 @@ async function runSearch() {
   };
   $('btn-search').disabled = true;
   setStatus('loading', '걷는 길을 계산하는 중이에요');
-  state.plan.routes = await prepareRoutes(state.plan.origin, state.plan.dest);
+  state.plan.routes = await cachedRoutes(state.plan.origin, state.plan.dest);
   $('btn-search').disabled = false;
   state.computed = compute(state.plan);
   go('results', { focus: false });
@@ -797,10 +937,7 @@ function renderResults({ keepStatus } = {}) {
   const reachable = state.computed.filter((p) => p.reachable);
 
   $('results-count').textContent = `${shown.length}곳`;
-  const dep = `${plan.departNow ? '지금' : fmtHM(plan.nowMin)} 출발`;
-  $('results-summary').textContent = plan.hasDeadline
-    ? `${dep} → ${fmtHM(plan.deadlineMin)}까지 ${plan.destMode === 'return' ? '출발지로 복귀' : plan.dest.label + ' 도착'}`
-    : `${dep} · 돌아올 시각 없음 · 걸어서 ${NEARBY_MIN}분 안`;
+  renderCondChips();
   renderExcluded();
   renderDataDate();
 
@@ -817,12 +954,27 @@ function renderResults({ keepStatus } = {}) {
     list.append(el('li', { className: 'none', textContent: '조건에 맞는 곳이 없어요.' }));
   } else {
     say('ok', plan.hasDeadline ? `${fmtHM(plan.deadlineMin)}까지 다녀올 수 있는 곳 ${shown.length}곳을 찾았어요.` : `${plan.departNow ? '지금' : `${fmtHM(plan.nowMin)}에 출발하면`} 갈 수 있는 곳 ${shown.length}곳을 찾았어요.`);
-    for (const p of shown) list.append(resultItem(p));
+    shown.forEach((p, i) => list.append(resultItem(p, i + 1)));
   }
-  renderMapPlaces(shown, { fit: true });
+  renderMapPlaces(shown, { fit: true, numbered: true });
 }
 
 // 운영하지 않아 뺀 곳: 접힌 목록으로
+function renderCondChips() {
+  const plan = state.plan;
+  const dep = plan.departNow ? `지금 ${fmtHM(plan.nowMin)}` : fmtHM(plan.nowMin);
+  const cells = [
+    ['cc-origin', `출발 · ${plan.origin.label}`, '출발지'],
+    ['cc-time', plan.hasDeadline ? `${dep} → ${fmtHM(plan.deadlineMin)}` : `${dep} · 시간 제한 없음`, '시간'],
+    ['cc-dest', plan.destMode === 'return' ? '출발지로 복귀' : `${plan.dest?.label} 도착`, '도착지'],
+  ];
+  for (const [id, text, what] of cells) {
+    $(id).textContent = text;
+    $(id).setAttribute('aria-label', `${what}: ${text}. 눌러서 바꾸기`);
+  }
+  $('cc-dest').hidden = !plan.hasDeadline;
+}
+
 function renderExcluded() {
   const out = state.computed.filter((p) => p.why === 'closed' || p.why === 'hours');
   const box = $('excluded');
@@ -851,21 +1003,47 @@ function stayNumber(c) {
   if (c.stay == null) return '자유';
   return fmtDur(c.stay).replace('약 ', '');
 }
-function resultItem(p) {
+// 가는 길·(기다림)·머무는 시간·(여유)·돌아오는 길 막대. 돌아올 시각이 있을 때만.
+function timeBar(c, plan, { big = false } = {}) {
+  if (!plan?.hasDeadline || !c.reachable || c.stay == null || c.until == null) return null;
+  const total = plan.deadlineMin - plan.nowMin;
+  const wait = Math.max(0, c.wait || 0);
+  const idle = Math.max(0, total - (c.go + wait + c.stay + c.back));
+  const segs = [['move', c.go], ['wait', wait], ['stay', c.stay], ['idle', idle], ['move', c.back]].filter(([, m]) => m > 0);
+  const bar = el('span', { className: `tbar${big ? ' big' : ''}` }, ...segs.map(([k, m]) => {
+    const seg = el('span', { className: `seg ${k}` });
+    seg.style.flexGrow = String(m);
+    return seg;
+  }));
+  bar.setAttribute('role', 'img');
+  bar.setAttribute('aria-label', `가는 길 ${c.go}분${wait ? `, 기다림 ${wait}분` : ''}, 머무는 시간 ${c.stay}분${idle ? `, 여유 ${idle}분` : ''}, ${plan.destMode === 'return' ? '돌아오는 길' : '도착지까지'} ${c.back}분`);
+  return bar;
+}
+
+function resultItem(p, n) {
   const t = stayText(p);
   const kindText = p.kind === 'event' ? '행사' : '상시 장소';
+  const bar = timeBar(p, state.plan);
+  const when = [p.wait > 0 ? null : `${fmtHM(p.arrive)} 도착`, t.sub].filter(Boolean).join(' · ');
   const btn = el('button', { type: 'button', className: 'result-row' },
     el('span', { className: 'head' },
-      el('span', { className: 'title', textContent: p.title }),
-      el('span', { className: 'meta', textContent: [kindText, p.isFree ? '무료' : '유료', p.category].join(' · ') })),
+      el('span', { className: `num-badge ${p.kind}`, textContent: String(n) }),
+      el('span', { className: 'head-text' },
+        el('span', { className: 'title', textContent: p.title }),
+        el('span', { className: 'meta', textContent: [kindText, p.isFree ? '무료' : '유료', p.category].join(' · ') }))),
     el('span', { className: 'nums' },
       el('span', { className: 'num' }, '걸어서', el('b', { textContent: fmtDur(p.go).replace('약 ', '') })),
       el('span', { className: `num stay${t.unknown ? ' unknown' : ''}` }, p.startOnly ? '공연' : '머물 수 있는 시간', el('b', { textContent: stayNumber(p) })),
       p.routed ? null : el('span', { className: 'approx', textContent: '직선 어림' })),
-    t.sub ? el('span', { className: `meta${t.unknown ? ' warn' : ''}`, textContent: t.sub }) : null);
+    bar,
+    when ? el('span', { className: `meta${t.unknown ? ' warn' : ''}`, textContent: when }) : null);
   btn.append(el('span', { className: 'chev', textContent: '›' }));
-  btn.setAttribute('aria-label', `${p.title}, ${kindText}, 걸어서 ${fmtDur(p.go)}, ${t.main}${t.sub ? `, ${t.sub}` : ''}. 자세히 보기`);
+  btn.setAttribute('aria-label', `${n}번 ${p.title}, ${kindText}, 걸어서 ${fmtDur(p.go)}, ${t.main}${t.sub ? `, ${t.sub}` : ''}. 자세히 보기`);
   btn.querySelector('.chev').setAttribute('aria-hidden', 'true');
+  // 카드 ↔ 지도 번호 마커 연동
+  btn.addEventListener('mouseenter', () => highlightMarker(p.id, { popup: false }));
+  btn.addEventListener('focus', () => highlightMarker(p.id, { popup: false }));
+  btn.addEventListener('mouseleave', () => highlightMarker(null, { popup: false }));
   btn.dataset.id = p.id;
   btn.addEventListener('click', () => openDetail(p.id));
   return el('li', {}, btn);
@@ -937,9 +1115,20 @@ function openDetail(id) {
       rows.push([plan.destMode === 'return' ? '돌아오는 데' : '도착지까지', fmtDur(c.back)]);
       if (c.reachable && c.until != null) rows.push(['나와야 하는 시각', `약 ${fmtHM(c.until)}`]);
     }
-    const times = el('dl', { className: 'times' });
-    for (const [k, v] of rows) times.append(el('div', {}, el('dt', { textContent: k }), el('dd', { textContent: v })));
-    wrap.append(el('h3', { textContent: '이동과 머무는 시간 (대략값)' }), times);
+    const bar = timeBar(c, plan, { big: true });
+    if (bar) {
+      const lbl = (t, k) => el('span', {}, el('strong', { textContent: fmtHM(t) }), el('br'), k);
+      wrap.append(el('div', { className: 'tblock' },
+        el('div', { className: 'tblock-head' }, el('span', { textContent: c.startOnly ? '공연 시작 후 머물 수 있는 시간' : '머물 수 있는 시간' }), el('strong', { textContent: stayNumber(c) })),
+        bar,
+        el('div', { className: 'tblock-times' },
+          lbl(plan.nowMin, '출발'), lbl(c.from, c.wait > 0 ? '입장' : '도착'), lbl(c.until, '나오기'),
+          lbl(c.until + c.back, plan.destMode === 'return' ? '복귀' : '도착'))));
+    } else {
+      const times = el('dl', { className: 'times' });
+      for (const [k, v] of rows) times.append(el('div', {}, el('dt', { textContent: k }), el('dd', { textContent: v })));
+      wrap.append(el('h3', { textContent: '이동과 머무는 시간 (대략값)' }), times);
+    }
     wrap.append(el('p', { className: 'hint', textContent: c.routed
       ? '걷는 시간은 OpenStreetMap 길 데이터로 계산했어요.'
       : '이 장소는 길 데이터 범위 밖이라 직선거리로 어림했어요. 실제로는 더 걸릴 수 있어요.' }));
@@ -977,6 +1166,10 @@ function openDetail(id) {
   }));
 
   const actions = el('div', { className: 'actions' });
+  const share = el('button', { type: 'button', className: 'btn share-btn', textContent: '공유' });
+  share.setAttribute('aria-label', `${p.title} 공유`);
+  share.addEventListener('click', () => shareSpot(p));
+  actions.append(share);
   const map = el('a', { className: 'btn', href: kakaoUrl(p), target: '_blank', rel: 'noopener', textContent: '길찾기 (카카오맵)' });
   map.setAttribute('aria-label', `${p.title} 길찾기, 카카오맵 새 탭에서 열림`);
   actions.append(map);
@@ -995,8 +1188,24 @@ function openDetail(id) {
   $('btn-detail-back').textContent = state.detailFrom === 'results' ? '← 목록으로' : '← 돌아가기';
   go('detail', { focus: false });
   $('v-detail-h').focus();
-  panTo(p, 15);
+  if (!drawRoute(c)) panTo(p, 15);
   highlightMarker(id);
+}
+
+// 장소 링크 공유: ?place=<id> (위치 정보는 넣지 않음)
+async function shareSpot(p) {
+  const url = `${location.origin}${location.pathname}?place=${encodeURIComponent(p.id)}`;
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: p.title, text: `${p.title} · ${p.venue}`, url });
+      return;
+    }
+    await navigator.clipboard.writeText(url);
+    setStatus('ok', '장소 링크를 복사했어요.', '메신저에 붙여 넣어 보내 보세요.');
+  } catch (e) {
+    if (e?.name === 'AbortError') return; // 공유 창을 닫음
+    setStatus('error', '링크를 복사하지 못했어요. 아래 주소를 직접 복사해 주세요.', url);
+  }
 }
 
 function closeDetail() {
@@ -1010,8 +1219,15 @@ function closeDetail() {
 /* ---------- 나들이 기록 ---------- */
 
 function addRecord(p, c) {
-  const plannedMin = c?.reachable ? c.go + (c.stay ?? 0) + c.back : null;
-  const rec = { placeId: p.id, title: p.title, venue: p.venue, date: todayStr(), plannedMin };
+  const ok = c?.reachable && state.plan;
+  const plannedMin = ok ? c.go + (c.stay ?? 0) + c.back : null;
+  const rec = {
+    placeId: p.id, title: p.title, venue: p.venue, date: todayStr(), plannedMin,
+    departAt: ok ? fmtHM(state.plan.nowMin) : null,
+    returnAt: ok && state.plan.hasDeadline && c.until != null ? fmtHM(c.until + c.back) : null,
+    stayMin: ok ? c.stay : null,
+    starred: false,
+  };
   state.store.records.unshift(rec);
   if (!saveStore()) { state.store.records.shift(); return; }
   setStatus('ok', `‘${p.title}’ 나들이를 기록했어요. 위쪽 ‘나들이 기록’ 탭에서 볼 수 있어요.`);
@@ -1019,26 +1235,68 @@ function addRecord(p, c) {
 }
 
 function renderRecordsPage() {
-  const recs = state.store.records;
-  const month = todayStr().slice(0, 7);
-  const thisMonth = recs.filter((r) => r.date.startsWith(month)).length;
-  $('rec-summary').textContent = recs.length ? `지금까지 ${recs.length}번 다녀왔어요 · 이번 달 ${thisMonth}번` : '';
+  const all = state.store.records;
+  const thisMonth = todayStr().slice(0, 7);
+  const month = state.recMonth || (state.recMonth = thisMonth);
+  const [y, m] = month.split('-').map(Number);
+  $('rec-month-h').textContent = `${y}년 ${m}월`;
+  const oldest = all.reduce((a, r) => (r.date < a ? r.date : a), todayStr()).slice(0, 7);
+  $('rec-prev').disabled = month <= oldest;
+  $('rec-next').disabled = month >= thisMonth;
 
+  const inMonth = all.map((r, i) => ({ r, i }))
+    .filter(({ r }) => r.date.startsWith(month))
+    .sort((a, b) => b.r.date.localeCompare(a.r.date) || a.i - b.i);
+  // 처음 간 곳: 이 기록보다 앞선 같은 장소 기록이 없음 (기록은 최근 것이 앞에 쌓임)
+  const isFirst = ({ r, i }) => !all.some((o, j) => o.placeId === r.placeId && (o.date < r.date || (o.date === r.date && j > i)));
+  $('rec-count').textContent = `${inMonth.length}번`;
+  const mins = inMonth.reduce((sum, { r }) => sum + (r.plannedMin || 0), 0);
+  $('rec-time').textContent = mins ? fmtSpan(mins) : '—';
+  $('rec-first').textContent = `${inMonth.filter(isFirst).length}곳`;
+
+  // 달력
+  const cal = $('rec-cal');
+  cal.replaceChildren();
+  for (const w of '일월화수목금토') cal.append(el('span', { className: 'cal-h', textContent: w }));
+  const firstDow = new Date(y, m - 1, 1).getDay();
+  const days = new Date(y, m, 0).getDate();
+  for (let k = 0; k < firstDow; k++) cal.append(el('span'));
+  const counts = {};
+  inMonth.forEach(({ r }) => { const d = +r.date.slice(8, 10); counts[d] = (counts[d] || 0) + 1; });
+  const today = todayStr();
+  for (let d = 1; d <= days; d++) {
+    const ds = `${month}-${pad(d)}`;
+    const cell = el('span', { className: `cal-d${counts[d] ? ' on' : ''}${ds === today ? ' today' : ''}`, textContent: String(d) });
+    if (counts[d] > 1) cell.append(el('small', { textContent: `×${counts[d]}` }));
+    cal.append(cell);
+  }
+  const visited = Object.keys(counts).map(Number).sort((a, b) => a - b);
+  cal.setAttribute('aria-label', visited.length ? `${m}월에 다녀온 날: ${visited.map((d) => `${d}일`).join(', ')}` : `${m}월에는 다녀온 날이 없어요`);
+
+  // 이 달의 기록
   const list = $('record-list');
   list.replaceChildren();
-  if (!recs.length) {
-    list.append(el('li', { className: 'empty', textContent: '아직 기록이 없어요. 장소 상세에서 ‘다녀왔어요’를 눌러 보세요.' }));
+  if (!inMonth.length) {
+    list.append(el('li', { className: 'empty', textContent: all.length ? `${m}월에는 기록이 없어요.` : '아직 기록이 없어요. 장소 상세에서 ‘다녀왔어요’를 눌러 보세요.' }));
   }
-  recs.forEach((r, i) => {
+  for (const { r, i } of inMonth) {
+    const dt = new Date(`${r.date}T00:00:00`);
+    const meta = r.departAt
+      ? `${r.departAt}${r.returnAt ? ` → ${r.returnAt}` : ' 출발'}${r.stayMin != null ? ` · 머문 시간(계획) ${fmtDur(r.stayMin)}` : ''}`
+      : `${r.venue}${r.plannedMin ? ` · 계획 ${fmtDur(r.plannedMin)}` : ''}`;
+    const star = el('button', { type: 'button', className: `star-btn${r.starred ? ' on' : ''}`, textContent: r.starred ? '★' : '☆' });
+    star.setAttribute('aria-pressed', String(!!r.starred));
+    star.setAttribute('aria-label', `${r.title} 다시 가고 싶은 곳으로 표시`);
+    star.addEventListener('click', () => toggleStar(i));
     const del = el('button', { type: 'button', className: 'btn btn-ghost', textContent: '삭제' });
     del.setAttribute('aria-label', `${r.date} ${r.title} 기록 삭제`);
     del.addEventListener('click', () => removeRecord(i));
     list.append(el('li', {},
-      el('div', {}, el('strong', { textContent: r.title }),
-        el('span', { className: 'meta', textContent: `${r.date} · ${r.venue}${r.plannedMin ? ` · 계획 ${fmtDur(r.plannedMin)}` : ''}` })),
-      del));
-  });
-  $('btn-clear-records').disabled = !recs.length;
+      el('span', { className: 'rec-day' }, el('strong', { textContent: String(dt.getDate()) }), el('span', { textContent: '일월화수목금토'[dt.getDay()] })),
+      el('div', { className: 'rec-body' }, el('strong', { textContent: r.title }), el('span', { className: 'meta', textContent: meta })),
+      star, del));
+  }
+  $('btn-clear-records').disabled = !all.length;
 
   const favs = $('fav-manage');
   favs.replaceChildren();
@@ -1053,6 +1311,22 @@ function renderRecordsPage() {
     favs.append(el('li', {}, el('div', {}, el('strong', { textContent: f.name }), el('span', { className: 'meta', textContent: st ? `${st.name}역` : '알 수 없는 역' })), del));
   }
   $('btn-clear-favs').disabled = !state.store.favorites.length;
+}
+
+function toggleStar(i) {
+  const r = state.store.records[i];
+  if (!r) return;
+  r.starred = !r.starred;
+  if (!saveStore()) { r.starred = !r.starred; return; }
+  renderRecordsPage();
+  setStatus('ok', r.starred ? `‘${r.title}’을(를) 다시 가고 싶은 곳으로 표시했어요.` : '표시를 지웠어요.');
+}
+
+function shiftRecMonth(delta) {
+  const [y, m] = state.recMonth.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  state.recMonth = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+  renderRecordsPage();
 }
 
 function removeRecord(i) {
@@ -1150,19 +1424,36 @@ function placeDot(p) {
   return b;
 }
 
-function renderMapPlaces(list, { fit }) {
+function renderMapPlaces(list, { fit, numbered = false }) {
   if (!mapEngine) return;
   markers.clear();
   if (mapEngine === 'kakao') {
     kPlaces.forEach((o) => o.setMap(null));
-    kPlaces = list.map((p) => {
+    kPlaces = list.map((p, i) => {
       const dot = placeDot(p);
+      if (numbered) dot.textContent = String(i + 1);
       markers.set(p.id, { el: dot });
       return kOverlay(p, dot, { zIndex: 2 });
     });
   } else {
     placeLayer.clearLayers();
-    for (const p of list) {
+    if (numbered) {
+      // 결과: 목록 순서대로 번호를 붙인 마커 (키보드는 목록 카드로 다룸)
+      list.forEach((p, i) => {
+        const m = L.marker([p.lat, p.lng], {
+          icon: L.divIcon({ className: '', html: `<span class="num-pin ${p.kind === 'event' ? 'event' : 'place'}">${i + 1}</span>`, iconSize: [30, 30], iconAnchor: [15, 15] }),
+          keyboard: false,
+          riseOnHover: true,
+        });
+        m.bindTooltip(`${i + 1}. ${p.title}`, { direction: 'top', offset: [0, -14] });
+        m.on('click', () => openDetail(p.id));
+        m.on('mouseover', () => hoverCard(p.id, true));
+        m.on('mouseout', () => hoverCard(p.id, false));
+        m.addTo(placeLayer);
+        markers.set(p.id, { leaflet: m, num: i + 1 });
+      });
+    }
+    for (const p of numbered ? [] : list) {
       const m = L.circleMarker([p.lat, p.lng], {
         radius: 9, color: '#fff', weight: 2, fillColor: COLORS[p.kind], fillOpacity: 1,
       });
@@ -1231,11 +1522,44 @@ function panTo(p, zoom) {
   }
 }
 
-function highlightMarker(id) {
-  markers.forEach((m) => m.el?.classList.remove('is-active'));
+function highlightMarker(id, { popup = true } = {}) {
+  markers.forEach((m, key) => {
+    const on = key === id;
+    m.el?.classList.toggle('is-active', on);
+    if (m.num && m.leaflet) {
+      m.leaflet.getElement()?.querySelector('.num-pin')?.classList.toggle('is-active', on);
+      m.leaflet.setZIndexOffset(on ? 1000 : 0);
+      if (on) m.leaflet.openTooltip(); else m.leaflet.closeTooltip();
+    }
+  });
   const m = markers.get(id);
-  m?.el?.classList.add('is-active');
-  m?.leaflet?.openPopup();
+  if (popup && m?.leaflet && !m.num) m.leaflet.openPopup();
+}
+
+// 지도 마커에 올리면 목록 카드도 강조
+function hoverCard(id, on) {
+  document.querySelector(`.result-row[data-id="${CSS.escape(id)}"]`)?.classList.toggle('is-hover', on);
+}
+
+// 상세: 출발지 → 장소 경로 선 (도착지가 다르면 장소 → 도착지 점선)
+let routeLayer = null;
+function clearRoute() {
+  if (routeLayer) { routeLayer.remove(); routeLayer = null; }
+}
+function drawRoute(c) {
+  clearRoute();
+  const routes = state.plan?.routes;
+  if (mapEngine !== 'leaflet' || !routes || !c?.routed) return false;
+  const goPath = routes.goPath(c);
+  if (!goPath) return false;
+  routeLayer = L.featureGroup().addTo(map);
+  L.polyline(goPath, { color: '#b2410f', weight: 5, opacity: 0.9 }).addTo(routeLayer);
+  if (state.plan.hasDeadline && state.plan.destMode === 'other') {
+    const back = routes.backPath(c);
+    if (back) L.polyline(back, { color: '#1d1b18', weight: 4, opacity: 0.7, dashArray: '6 8' }).addTo(routeLayer);
+  }
+  map.fitBounds(routeLayer.getBounds(), { padding: [48, 48], maxZoom: 17, animate: !reduceMotion() });
+  return true;
 }
 
 function relayoutMap() {
@@ -1297,7 +1621,7 @@ async function init() {
     const t = fmtHM(toMin(nowDate()));
     $('now-label').textContent = t;
     $('depart-now').textContent = t;
-    if (state.view === 'time') syncRange();
+    if (state.view === 'time') { syncRange(); renderSentence(); }
   };
   tickNow();
   setInterval(tickNow, 30000);
@@ -1314,13 +1638,26 @@ async function init() {
   document.querySelectorAll('[data-next]').forEach((b) => b.addEventListener('click', () => onNext(b.dataset.next)));
   $('btn-search').addEventListener('click', runSearch);
   $('btn-detail-back').addEventListener('click', closeDetail);
-  $('deadline').addEventListener('input', () => { clearErr('deadline-err', 'deadline'); syncRange(); });
+  $('deadline').addEventListener('input', () => { clearErr('deadline-err', 'deadline'); syncRange(); renderSentence(); scheduleCount(); });
   $('deadline-range').addEventListener('input', onRange);
-  document.querySelectorAll('input[name="deadlineMode"]').forEach((r) => r.addEventListener('change', syncDeadlineUI));
   document.querySelectorAll('input[name="departMode"]').forEach((r) => r.addEventListener('change', syncDepartUI));
-  $('depart').addEventListener('input', () => { clearErr('depart-err', 'depart'); syncRange(); });
+  $('depart').addEventListener('input', () => { clearErr('depart-err', 'depart'); syncRange(); renderSentence(); scheduleCount(); });
   $('deadline').addEventListener('keydown', (e) => { if (e.key === 'Enter') onNext('time'); });
-  document.querySelectorAll('.quick .chip').forEach((b) => b.addEventListener('click', onQuickAdd));
+  document.querySelectorAll('.span-chip[data-add]').forEach((b) => b.addEventListener('click', onQuickAdd));
+  $('chip-none').addEventListener('click', onNoDeadline);
+  $('btn-custom').addEventListener('click', () => toggleCustom($('deadline-box').hidden));
+  $('tok-deadline').addEventListener('click', () => toggleCustom($('deadline-box').hidden));
+  $('tok-depart').addEventListener('click', () => {
+    const open = $('depart-editor').hidden;
+    $('depart-editor').hidden = !open;
+    $('tok-depart').setAttribute('aria-expanded', String(open));
+  });
+  $('tok-dest').addEventListener('click', () => { if (checkTime()) go('dest'); });
+  document.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => startEdit(b.dataset.edit)));
+  document.querySelectorAll('[data-apply]').forEach((b) => b.addEventListener('click', () => applyEdit(b.dataset.apply)));
+  document.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', cancelEdit));
+  $('rec-prev').addEventListener('click', () => shiftRecMonth(-1));
+  $('rec-next').addEventListener('click', () => shiftRecMonth(1));
   document.querySelectorAll('input[name="destMode"]').forEach((r) => r.addEventListener('change', syncDestMode));
   const refilter = () => state.computed && renderResults();
   $('f-free').addEventListener('change', refilter);
@@ -1355,6 +1692,13 @@ async function init() {
   route();
   renderHere();
   locateMe();
+
+  // 공유받은 장소 링크(?place=)로 열면 그 상세부터
+  const sharedId = new URLSearchParams(location.search).get('place');
+  if (sharedId) {
+    if (state.places.some((x) => x.id === sharedId)) openDetail(sharedId);
+    else setStatus('empty', '링크의 장소를 찾지 못했어요.', '행사가 끝났거나 정보가 바뀌었을 수 있어요.');
+  }
 
   if (!storeOk) {
     setStatus('error', '저장된 즐겨찾기와 기록을 읽지 못했어요.', '사생활 보호 모드라면 일반 창에서 열어 주세요. 찾기는 그대로 쓸 수 있어요.');

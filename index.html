@@ -19,7 +19,7 @@
   <meta property="og:locale" content="ko_KR">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-  <link rel="stylesheet" href="style.css?v=20261018b">
+  <link rel="stylesheet" href="style.css?v=20261018e">
 </head>
 <body>
   <a class="skip" href="#panel">‘지금 떠나기’로 건너뛰기</a>
@@ -73,56 +73,65 @@
           <div class="step-nav">
             <button type="button" class="btn" data-prev>이전</button>
             <button type="button" class="btn btn-primary" data-next="origin">다음</button>
+            <button type="button" class="btn" data-cancel>취소</button>
+            <button type="button" class="btn btn-primary" data-apply="origin">이 조건으로 다시 찾기</button>
           </div>
         </section>
 
         <!-- 2 시간 -->
         <section data-view="time" aria-labelledby="v-time-h" hidden>
           <p class="stepper"></p>
-          <h2 id="v-time-h" tabindex="-1">언제 출발해서, 언제까지 돌아오나요?</h2>
-          <fieldset class="depart">
-            <legend>출발</legend>
-            <div class="seg">
-              <label><input type="radio" name="departMode" value="now" checked> 지금 (<span id="depart-now">--:--</span>)</label>
-              <label><input type="radio" name="departMode" value="set"> 시각 정하기</label>
-            </div>
-            <div id="depart-box" class="row" hidden>
-              <label for="depart" class="visually-hidden">출발 시각</label>
-              <input id="depart" type="time" step="300" aria-describedby="depart-err">
-            </div>
-            <p id="depart-err" class="field-err" hidden></p>
-          </fieldset>
-          <fieldset class="return">
-            <legend>돌아오기</legend>
-            <div class="seg">
-              <label><input type="radio" name="deadlineMode" value="set" checked> 시각 정하기</label>
-              <label><input type="radio" name="deadlineMode" value="none"> 딱히 없어요</label>
-            </div>
-          </fieldset>
+          <h2 id="v-time-h" tabindex="-1">언제까지 시간이 있나요?</h2>
 
-          <div id="deadline-box" class="deadline-box">
+          <p class="sentence" id="time-sentence">
+            <button type="button" class="tok" id="tok-depart" aria-expanded="false" aria-controls="depart-editor">지금</button>에 출발해서
+            <span id="sent-deadline"><button type="button" class="tok tok-main" id="tok-deadline" aria-expanded="false" aria-controls="deadline-box">--:--</button>까지
+            <button type="button" class="tok" id="tok-dest">출발지로</button><span id="sent-tail"> 돌아올게요</span></span><span id="sent-none" hidden>시간 제한 없이 다녀올게요</span>
+          </p>
+
+          <div id="depart-editor" class="editor" hidden>
+            <fieldset class="depart">
+              <legend>출발</legend>
+              <div class="seg">
+                <label><input type="radio" name="departMode" value="now" checked> 지금 (<span id="depart-now">--:--</span>)</label>
+                <label><input type="radio" name="departMode" value="set"> 시각 정하기</label>
+              </div>
+              <div id="depart-box" class="row" hidden>
+                <label for="depart" class="visually-hidden">출발 시각</label>
+                <input id="depart" type="time" step="300" aria-describedby="depart-err">
+              </div>
+            </fieldset>
+          </div>
+          <p id="depart-err" class="field-err" hidden></p>
+
+          <div class="quick-span" role="group" aria-label="얼마 동안 다녀올까요">
+            <button type="button" class="span-chip" data-add="60">1시간</button>
+            <button type="button" class="span-chip" data-add="90">1시간 30분</button>
+            <button type="button" class="span-chip" data-add="120">2시간</button>
+            <button type="button" class="span-chip" data-add="180">3시간</button>
+            <button type="button" class="span-chip" data-add="240">4시간</button>
+            <button type="button" class="span-chip span-none" id="chip-none">제한 없음</button>
+          </div>
+          <button type="button" class="link custom-toggle" id="btn-custom" aria-expanded="false" aria-controls="deadline-box">직접 고르기</button>
+
+          <div id="deadline-box" class="deadline-box editor" hidden>
             <label for="deadline">이 시각까지 도착지에 닿을게요</label>
             <div class="row time-row">
               <input id="deadline" type="time" step="300" aria-describedby="deadline-err deadline-left deadline-hint">
               <span id="deadline-left" class="left"></span>
             </div>
-            <label for="deadline-range" class="visually-hidden">지금부터 남은 시간</label>
+            <label for="deadline-range" class="visually-hidden">출발부터 남은 시간</label>
             <input id="deadline-range" class="range" type="range" min="20" max="600" step="10" value="20" aria-describedby="deadline-left">
-            <div class="quick" role="group" aria-label="빠르게 고르기">
-              <button type="button" class="chip" data-add="30">+30분</button>
-              <button type="button" class="chip" data-add="60">+1시간</button>
-              <button type="button" class="chip" data-add="90">+1시간 30분</button>
-              <button type="button" class="chip" data-add="120">+2시간</button>
-              <button type="button" class="chip" data-add="180">+3시간</button>
-              <button type="button" class="chip" data-add="240">+4시간</button>
-            </div>
-            <p id="deadline-hint" class="hint">지금은 <span id="now-label">--:--</span> · 시각을 직접 입력하거나 막대를 움직여도 돼요.</p>
-            <p id="deadline-err" class="field-err" hidden></p>
+            <p id="deadline-hint" class="hint">지금은 <span id="now-label">--:--</span></p>
           </div>
+          <p id="deadline-err" class="field-err" hidden></p>
           <p id="nodeadline-hint" class="hint nodeadline" hidden>출발할 때 열려 있거나 곧 여는 곳 중 걸어서 30분 안에 갈 수 있는 곳을, 닫을 때까지 머물 수 있는 시간과 함께 보여 드려요. 도착지는 고르지 않아도 돼요.</p>
+          <p id="time-count" class="time-count" aria-live="polite"></p>
           <div class="step-nav">
             <button type="button" class="btn" data-prev>이전</button>
             <button type="button" class="btn btn-primary" data-next="time">다음</button>
+            <button type="button" class="btn" data-cancel>취소</button>
+            <button type="button" class="btn btn-primary" data-apply="time">이 조건으로 다시 찾기</button>
           </div>
         </section>
 
@@ -141,6 +150,8 @@
           <div class="step-nav">
             <button type="button" class="btn" data-prev>이전</button>
             <button type="button" class="btn btn-primary" data-next="dest">다음</button>
+            <button type="button" class="btn" data-cancel>취소</button>
+            <button type="button" class="btn btn-primary" data-apply="dest">이 조건으로 다시 찾기</button>
           </div>
         </section>
 
@@ -162,11 +173,14 @@
         <!-- 결과 목록 -->
         <section data-view="results" aria-labelledby="v-results-h" hidden>
           <div class="view-top">
-            <button type="button" class="link" data-go="confirm">← 조건 바꾸기</button>
+            <h2 id="v-results-h" tabindex="-1">추천 <span id="results-count"></span></h2>
             <button type="button" class="link" data-go="start">처음으로</button>
           </div>
-          <h2 id="v-results-h" tabindex="-1">추천 <span id="results-count"></span></h2>
-          <p id="results-summary" class="results-summary"></p>
+          <div class="cond-chips" role="group" aria-label="찾은 조건 — 누르면 바로 바꿀 수 있어요">
+            <button type="button" class="cond-chip" id="cc-origin" data-edit="origin"></button>
+            <button type="button" class="cond-chip" id="cc-time" data-edit="time"></button>
+            <button type="button" class="cond-chip" id="cc-dest" data-edit="dest"></button>
+          </div>
 
           <div class="filters" role="group" aria-label="필터와 정렬">
             <label class="check"><input type="checkbox" id="f-free"> 무료만</label>
@@ -214,7 +228,22 @@
       <h2 id="records-h" tabindex="-1">나들이 기록</h2>
       <p class="hint">이 브라우저에만 저장돼요. 위치는 저장하지 않아요.</p>
       <div id="rec-status" class="status" role="status" aria-live="polite"></div>
-      <p id="rec-summary" class="rec-summary"></p>
+      <section class="rec-month" aria-labelledby="rec-month-h">
+        <div class="rec-month-head">
+          <h3 id="rec-month-h"></h3>
+          <div class="rec-month-nav">
+            <button type="button" class="icon-btn" id="rec-prev" aria-label="지난달">‹</button>
+            <button type="button" class="icon-btn" id="rec-next" aria-label="다음 달">›</button>
+          </div>
+        </div>
+        <dl class="rec-stats">
+          <div><dt>다녀온 횟수</dt><dd id="rec-count">0번</dd></div>
+          <div><dt>나들이에 쓴 시간</dt><dd id="rec-time">—</dd></div>
+          <div><dt>처음 간 곳</dt><dd id="rec-first">0곳</dd></div>
+        </dl>
+        <div id="rec-cal" class="rec-cal" role="img"></div>
+        <p class="hint">진한 칸은 다녀온 날, 테두리는 오늘이에요.</p>
+      </section>
       <ul id="record-list" class="record-list"></ul>
       <button type="button" id="btn-clear-records" class="btn btn-ghost">기록 전체 삭제</button>
 
@@ -226,9 +255,9 @@
   </main>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-  <script src="config.js?v=20261018b"></script>
-  <script src="hours.js?v=20261018b"></script>
-  <script src="walk.js?v=20261018b"></script>
-  <script src="app.js?v=20261018b"></script>
+  <script src="config.js?v=20261018e"></script>
+  <script src="hours.js?v=20261018e"></script>
+  <script src="walk.js?v=20261018e"></script>
+  <script src="app.js?v=20261018e"></script>
 </body>
 </html>
